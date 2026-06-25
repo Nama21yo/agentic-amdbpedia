@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Secret scan
+        run: |
+          if grep -RInE '(gsk_[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9_-]{20,})' \
+            --exclude-dir=.git --exclude=uv.lock .; then
+            echo "Potential API key detected"
+            exit 1
+          fi
+      - name: Lint and type check
+        run: make lint
+
+  unit-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Unit tests
+        run: make test
+
+  integration-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Start Qdrant
+        run: docker compose up -d qdrant
+      - name: Wait for Qdrant
+        run: python scripts/wait_for_qdrant.py
+      - name: Integration tests
+        run: uvx --with pydantic --with pydantic-settings --with pytest pytest -m integration
