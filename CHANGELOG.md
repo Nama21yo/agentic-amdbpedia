@@ -1,5 +1,9 @@
 # Changelog
 
+- `test(agent): add guardrail and grounding suite (refs 5.5)`
+- `feat(agent): add Groq routing, prompt guardrails, classifier, and ReAct loop (refs 5.1, 5.2, 5.3, 5.4)`
+- `test(mcp): add stdio protocol integration coverage (refs 4.6)`
+- `feat(mcp): add FastMCP tools, benchmark resource, XML generation, and consent gate (refs 4.1, 4.2, 4.3, 4.4, 4.5)`
 - `test(rag): add retrieval precision and acronym regression suite (refs 3.4)`
 - `feat(rag): add hybrid retrieval with confidence fallback (refs 3.1, 3.2, 3.3)`
 - `test(rag): add indexing coverage and Qdrant integration suite (refs 2.4)`
