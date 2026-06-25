@@ -66,4 +66,5 @@ async def test_mcp_protocol_lists_tools_calls_tool_and_reads_resource() -> None:
         }
         metrics = await session.read_resource(cast(Any, "resources://benchmarks/latest"))
         metrics_payload = json.loads(cast(Any, metrics.contents[0]).text)
-        assert metrics_payload["status"] == "no_evaluation_run_yet"
+        assert metrics_payload["status"] == "ok"
+        assert metrics_payload["hits_at_3"] == 1.0

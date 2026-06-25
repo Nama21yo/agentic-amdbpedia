@@ -1,0 +1,80 @@
+{
+  "status": "ok",
+  "metric": "hits_at_3",
+  "hits_at_3": 1.0,
+  "evaluated_queries": 8,
+  "breakdown": [
+    {
+      "id": "airport_icao",
+      "query": "አይካኦ_ኮድ ICAO",
+      "target_class": "Airport",
+      "expected_property": "icaoLocationIdentifier",
+      "top_properties": ["icaoLocationIdentifier"],
+      "no_match": false,
+      "hit": true
+    },
+    {
+      "id": "airport_iata",
+      "query": "አያታ_ኮድ IATA",
+      "target_class": "Airport",
+      "expected_property": "iataLocationIdentifier",
+      "top_properties": ["iataLocationIdentifier"],
+      "no_match": false,
+      "hit": true
+    },
+    {
+      "id": "airport_runway",
+      "query": "የመሮጫ_መንገድ_ርዝመት",
+      "target_class": "Airport",
+      "expected_property": "runwayLength",
+      "top_properties": ["runwayLength"],
+      "no_match": false,
+      "hit": true
+    },
+    {
+      "id": "dam_height",
+      "query": "የግድብ_ከፍታ",
+      "target_class": "Dam",
+      "expected_property": "height",
+      "top_properties": ["height"],
+      "no_match": false,
+      "hit": true
+    },
+    {
+      "id": "dam_opening",
+      "query": "የግድብ_መክፈቻ_ቀን",
+      "target_class": "Dam",
+      "expected_property": "openingDate",
+      "top_properties": ["openingDate"],
+      "no_match": false,
+      "hit": true
+    },
+    {
+      "id": "artist_stage_name",
+      "query": "የመድረክ_ስም",
+      "target_class": "MusicalArtist",
+      "expected_property": "alias",
+      "top_properties": ["alias"],
+      "no_match": false,
+      "hit": true
+    },
+    {
+      "id": "artist_birth_name",
+      "query": "የትውልድ_ስም",
+      "target_class": "MusicalArtist",
+      "expected_property": "birthName",
+      "top_properties": ["birthName"],
+      "no_match": false,
+      "hit": true
+    },
+    {
+      "id": "artist_active_start",
+      "query": "የስራ_መጀመሪያ_ዓመት",
+      "target_class": "MusicalArtist",
+      "expected_property": "activeYearsStartYear",
+      "top_properties": ["activeYearsStartYear"],
+      "no_match": false,
+      "hit": true
+    }
+  ]
+}

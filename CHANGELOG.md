@@ -1,5 +1,8 @@
 # Changelog
 
+- `docs(eval): add generated results report and failure-case mitigations (refs 7.4)`
+- `feat(eval): add golden queries, precision harness, and relevance harness (refs 7.1, 7.2, 7.3)`
+- `docs(mcp): add Claude Desktop config helper and handshake tests (refs 6.1, 6.2)`
 - `test(agent): add guardrail and grounding suite (refs 5.5)`
 - `feat(agent): add Groq routing, prompt guardrails, classifier, and ReAct loop (refs 5.1, 5.2, 5.3, 5.4)`
 - `test(mcp): add stdio protocol integration coverage (refs 4.6)`

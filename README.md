@@ -35,3 +35,16 @@ cross-lingual and acronym cases.
 just test
 just validate-corpus
 ```
+
+## Claude Desktop
+
+Generate the MCP configuration block for this checkout:
+
+```bash
+uv run python scripts/print_desktop_config.py
+```
+
+Paste the resulting JSON into `claude_desktop_config.json`, set
+`GROQ_API_KEY`, and restart Claude Desktop. The server exposes
+`find_semantic_match`, `generate_mapping_syntax`, and
+`resources://benchmarks/latest`.

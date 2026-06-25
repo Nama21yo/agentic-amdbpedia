@@ -9,3 +9,4 @@ __pycache__/
 .uv-cache/
 .uv-tools/
 qdrant_data/
+.serena/
