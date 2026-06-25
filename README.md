@@ -2,9 +2,26 @@
 
 Amharic-to-English DBpedia ontology mapping via hybrid retrieval and MCP tools.
 
-This repository implements an AI copilot for cross-lingual semantic web engineering:
-Amharic Wikipedia infobox fields are matched against English DBpedia ontology
-properties, then rendered into deterministic MediaWiki mapping syntax by MCP tools.
+## Domain
+
+This project targets cross-lingual semantic web engineering for Amharic Wikipedia
+infobox to English DBpedia ontology mapping. Editors currently spend substantial
+time guessing technical ontology property names, while generic translation tools
+miss schema-specific terms and acronym-heavy fields such as IATA or ICAO codes.
+Retrieval-augmented generation is required because the DBpedia ontology is large,
+strictly typed, and changes over time; MCP tools are required so deterministic
+code, not an LLM, generates MediaWiki XML and exposes live benchmark resources.
+
+## Architecture
+
+```text
+Amharic infobox field
+  -> input validation and guardrails
+  -> dense + sparse retrieval over DBpedia ontology documents
+  -> grounded agent selection from retrieved properties only
+  -> MCP tool: deterministic mapping XML generation
+  -> MCP resource: evaluation metrics
+```
 
 ## Current Milestone
 
