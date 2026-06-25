@@ -79,6 +79,7 @@ def test_retrieval_circuit_breaker_degrades_after_failure() -> None:
             client=BrokenClient(),
             dense_embedder=lambda _: [0.0] * 16,
             sparse_embedder=lexical_sparse_vector,
+            confidence_threshold=0.1,
             circuit_breaker=breaker,
         )
 
@@ -87,6 +88,7 @@ def test_retrieval_circuit_breaker_degrades_after_failure() -> None:
         client=BrokenClient(),
         dense_embedder=lambda _: [0.0] * 16,
         sparse_embedder=lexical_sparse_vector,
+        confidence_threshold=0.1,
         circuit_breaker=breaker,
     )
     assert degraded == [NoMatchFound(query="አይካኦ_ኮድ", reason="Retrieval temporarily unavailable")]
