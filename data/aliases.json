@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "description": "Amharic-to-English alias table for DBpedia ontology property retrieval.",
+  "aliases": [
+    {
+      "class": "Airport",
+      "amharic": "አያታ_ኮድ",
+      "english_aliases": ["IATA", "IATA code", "airport IATA identifier"],
+      "ontology_property": "iataLocationIdentifier",
+      "notes": "Acronym-sensitive airport identifier."
+    },
+    {
+      "class": "Airport",
+      "amharic": "አይካኦ_ኮድ",
+      "english_aliases": ["ICAO", "ICAO code", "airport ICAO identifier"],
+      "ontology_property": "icaoLocationIdentifier",
+      "notes": "Acronym-collision regression case for sparse lexical rescue."
+    },
+    {
+      "class": "Airport",
+      "amharic": "የመሮጫ_መንገድ_ርዝመት",
+      "english_aliases": ["runway length", "runwayLength"],
+      "ontology_property": "runwayLength",
+      "notes": "Morphological Amharic phrase for a compound English property."
+    },
+    {
+      "class": "Dam",
+      "amharic": "የግድብ_ከፍታ",
+      "english_aliases": ["dam height", "height"],
+      "ontology_property": "height",
+      "notes": "Class-scoped alias for a generic dimensional property."
+    },
+    {
+      "class": "River",
+      "amharic": "የወንዝ_ፍሳሽ",
+      "english_aliases": ["river discharge", "discharge"],
+      "ontology_property": "discharge",
+      "notes": "Hydrology-specific term for river flow volume."
+    },
+    {
+      "class": "MusicalArtist",
+      "amharic": "የመድረክ_ስም",
+      "english_aliases": ["stage name", "alias"],
+      "ontology_property": "alias",
+      "notes": "Artist alias maps to DBpedia alias property."
+    },
+    {
+      "class": "University",
+      "amharic": "የተማሪዎች_ብዛት",
+      "english_aliases": ["number of students", "student count"],
+      "ontology_property": "numberOfStudents",
+      "notes": "Core university count field."
+    },
+    {
+      "class": "Settlement",
+      "amharic": "ጠቅላላ_ህዝብ",
+      "english_aliases": ["total population", "populationTotal"],
+      "ontology_property": "populationTotal",
+      "notes": "Settlement infobox population field."
+    }
+  ]
+}
