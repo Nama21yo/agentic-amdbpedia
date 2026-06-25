@@ -1,0 +1,56 @@
+from __future__ import annotations
+
+import pytest
+from pydantic import ValidationError
+
+from config import Settings
+
+
+def clear_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in (
+        "GROQ_API_KEY",
+        "QDRANT_URL",
+        "QDRANT_API_KEY",
+        "EMBEDDING_MODEL_DENSE",
+        "EMBEDDING_MODEL_SPARSE",
+        "GROQ_MODEL_FAST",
+        "GROQ_MODEL_REASONING",
+        "RETRIEVAL_CONFIDENCE_THRESHOLD",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_settings_load_valid_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    clear_settings_env(monkeypatch)
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_test_placeholder")
+    monkeypatch.setenv("QDRANT_URL", "http://qdrant:6333")
+    monkeypatch.setenv("QDRANT_API_KEY", "test-qdrant-key")
+    monkeypatch.setenv("RETRIEVAL_CONFIDENCE_THRESHOLD", "0.42")
+
+    settings = Settings()
+
+    assert settings.groq_api_key == "gsk_test_placeholder"
+    assert settings.qdrant_url == "http://qdrant:6333"
+    assert settings.qdrant_api_key == "test-qdrant-key"
+    assert settings.embedding_model_dense == "BAAI/bge-m3"
+    assert settings.retrieval_confidence_threshold == 0.42
+
+
+def test_settings_missing_groq_key_raises_validation_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clear_settings_env(monkeypatch)
+
+    with pytest.raises(ValidationError, match="GROQ_API_KEY"):
+        Settings()
+
+
+def test_settings_malformed_threshold_raises_validation_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clear_settings_env(monkeypatch)
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_test_placeholder")
+    monkeypatch.setenv("RETRIEVAL_CONFIDENCE_THRESHOLD", "not-a-float")
+
+    with pytest.raises(ValidationError, match="RETRIEVAL_CONFIDENCE_THRESHOLD"):
+        Settings()
