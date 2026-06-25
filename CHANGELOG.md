@@ -1,5 +1,6 @@
 # Changelog
 
+- `docs(demo): expand Claude Desktop demo runbook with full setup and presenter flow`
 - `docs(final): add demo, report script, architecture, traceability, future work (refs 8.1, 8.2, 9.5)`
 - `test(e2e): add full pipeline and scheduled latency budget gates (refs 9.3, 9.4)`
 - `feat(reliability): add structured logs, correlation IDs, typed errors, circuit breaker (refs 9.1, 9.2, 9.3)`
