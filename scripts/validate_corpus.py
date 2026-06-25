@@ -5,10 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
-
 
 REQUIRED_PROPERTY_FIELDS = (
     "propertyName",
@@ -100,7 +99,9 @@ def validate_property_documents(documents: Iterable[PropertyDocument]) -> None:
             )
 
 
-def validate_aliases(aliases: list[dict[str, object]], property_names: set[str], aliases_path: Path) -> None:
+def validate_aliases(
+    aliases: list[dict[str, object]], property_names: set[str], aliases_path: Path
+) -> None:
     seen_icao_case = False
     for index, alias in enumerate(aliases, start=1):
         for field in ("class", "amharic", "english_aliases", "ontology_property", "notes"):
@@ -148,7 +149,9 @@ def validate_corpus(corpus_dir: Path) -> list[PropertyDocument]:
 
     validate_property_documents(documents)
     aliases_path = corpus_dir / "aliases.json"
-    validate_aliases(load_aliases(aliases_path), {doc.fields["propertyName"] for doc in documents}, aliases_path)
+    validate_aliases(
+        load_aliases(aliases_path), {doc.fields["propertyName"] for doc in documents}, aliases_path
+    )
     return documents
 
 
@@ -163,7 +166,8 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
         return 1
 
-    print(f"Validated {len(class_markdown_files(args.corpus_dir))} classes and {len(documents)} properties")
+    class_count = len(class_markdown_files(args.corpus_dir))
+    print(f"Validated {class_count} classes and {len(documents)} properties")
     return 0
 
 

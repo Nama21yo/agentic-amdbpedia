@@ -57,6 +57,13 @@
       "english_aliases": ["total population", "populationTotal"],
       "ontology_property": "populationTotal",
       "notes": "Settlement infobox population field."
+    },
+    {
+      "class": "Settlement",
+      "amharic": "UTC_ልዩነት",
+      "english_aliases": ["UTC", "UTC offset", "time zone offset"],
+      "ontology_property": "utcOffset",
+      "notes": "Acronym-sensitive time offset field."
     }
   ]
 }
