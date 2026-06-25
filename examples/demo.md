@@ -175,6 +175,8 @@ Expected shape:
       "command": "uv",
       "args": [
         "run",
+        "--project",
+        "/home/matania/Desktop/dbpedia/cross-lingual",
         "python",
         "/home/matania/Desktop/dbpedia/cross-lingual/mcp_server/server.py"
       ],

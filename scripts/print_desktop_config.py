@@ -13,7 +13,7 @@ def build_desktop_config(project_root: Path | None = None) -> dict[str, object]:
         "mcpServers": {
             "dbpedia_mapper": {
                 "command": "uv",
-                "args": ["run", "python", str(server_path)],
+                "args": ["run", "--project", str(root), "python", str(server_path)],
                 "env": {"GROQ_API_KEY": "your_groq_api_key_here"},
             }
         }

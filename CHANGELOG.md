@@ -1,5 +1,6 @@
 # Changelog
 
+- `fix(mcp): generate Claude Desktop config with explicit uv project`
 - `fix(indexing): support direct script execution and bge-m3 dense loading`
 - `docs(demo): expand Claude Desktop demo runbook with full setup and presenter flow`
 - `docs(final): add demo, report script, architecture, traceability, future work (refs 8.1, 8.2, 9.5)`
