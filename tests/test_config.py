@@ -27,7 +27,7 @@ def test_settings_load_valid_environment(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("QDRANT_API_KEY", "test-qdrant-key")
     monkeypatch.setenv("RETRIEVAL_CONFIDENCE_THRESHOLD", "0.42")
 
-    settings = Settings()
+    settings = Settings(_env_file=None)
 
     assert settings.groq_api_key == "gsk_test_placeholder"
     assert settings.qdrant_url == "http://qdrant:6333"
@@ -42,7 +42,7 @@ def test_settings_missing_groq_key_raises_validation_error(
     clear_settings_env(monkeypatch)
 
     with pytest.raises(ValidationError, match="GROQ_API_KEY"):
-        Settings()
+        Settings(_env_file=None)
 
 
 def test_settings_malformed_threshold_raises_validation_error(
@@ -53,4 +53,4 @@ def test_settings_malformed_threshold_raises_validation_error(
     monkeypatch.setenv("RETRIEVAL_CONFIDENCE_THRESHOLD", "not-a-float")
 
     with pytest.raises(ValidationError, match="RETRIEVAL_CONFIDENCE_THRESHOLD"):
-        Settings()
+        Settings(_env_file=None)
