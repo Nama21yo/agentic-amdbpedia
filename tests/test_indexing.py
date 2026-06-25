@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from rag.embeddings import SparseVector, deterministic_dense_vector, lexical_sparse_vector
 from rag.indexing import (
     DEFAULT_COLLECTION_NAME,
@@ -10,6 +12,7 @@ from rag.indexing import (
     chunk_corpus,
     create_collection,
     index_corpus,
+    qdrant_client_from_settings,
 )
 from scripts.validate_corpus import parse_property_documents
 
@@ -132,3 +135,14 @@ def test_index_corpus_upserts_once_per_chunk() -> None:
     assert count == 36
     assert len(client.upserts) == 1
     assert len(client.upserts[0][1]) == 36
+
+
+def test_indexing_qdrant_client_does_not_require_groq_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.setenv("QDRANT_URL", "http://localhost:6333")
+
+    client = qdrant_client_from_settings()
+
+    assert client is not None

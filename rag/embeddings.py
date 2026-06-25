@@ -66,6 +66,11 @@ def deterministic_dense_vector(text: str, *, size: int = 16) -> list[float]:
 
 @lru_cache(maxsize=4)
 def _dense_model(model_name: str) -> Any:
+    if model_name == DEFAULT_DENSE_MODEL:
+        from sentence_transformers import SentenceTransformer
+
+        return SentenceTransformer(model_name)
+
     from fastembed import TextEmbedding
 
     return TextEmbedding(model_name=model_name, lazy_load=True)
@@ -79,9 +84,13 @@ def _sparse_model(model_name: str) -> Any:
 
 
 def embed_dense(text: str, model_name: str = DEFAULT_DENSE_MODEL) -> list[float]:
-    """Embed text with FastEmbed's dense model."""
+    """Embed text with the configured dense model."""
 
-    embedding = next(_dense_model(model_name).query_embed([text]))
+    model = _dense_model(model_name)
+    if hasattr(model, "encode"):
+        embedding = model.encode(text, normalize_embeddings=True)
+        return [float(value) for value in embedding.tolist()]
+    embedding = next(model.query_embed([text]))
     return [float(value) for value in embedding.tolist()]
 
 

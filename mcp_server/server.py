@@ -10,6 +10,9 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field, ValidationError, field_validator
 

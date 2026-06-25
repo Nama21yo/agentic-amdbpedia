@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config import Settings
 from rag.embeddings import (
@@ -125,8 +130,12 @@ def chunk_corpus(data_dir: Path | str = "data") -> list[OntologyChunk]:
 def qdrant_client_from_settings(settings: Settings | None = None) -> Any:
     from qdrant_client import QdrantClient
 
-    resolved = settings or Settings()
-    return QdrantClient(url=resolved.qdrant_url, api_key=resolved.qdrant_api_key)
+    if settings is not None:
+        return QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
+    return QdrantClient(
+        url=os.environ.get("QDRANT_URL", "http://localhost:6333"),
+        api_key=os.environ.get("QDRANT_API_KEY"),
+    )
 
 
 def create_collection(

@@ -23,3 +23,15 @@ def test_print_desktop_config_outputs_valid_json_with_existing_path() -> None:
     assert server["args"][:2] == ["run", "python"]
     assert Path(server["args"][2]).exists()
     assert "GROQ_API_KEY" in server["env"]
+
+
+def test_indexing_script_direct_execution_imports_project_root() -> None:
+    result = subprocess.run(
+        [sys.executable, "rag/indexing.py", "--help"],
+        cwd=PROJECT_ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+    assert "Index DBpedia ontology property documents into Qdrant" in result.stdout
