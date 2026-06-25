@@ -1,5 +1,10 @@
 # Changelog
 
+- `test(rag): add retrieval precision and acronym regression suite (refs 3.4)`
+- `feat(rag): add hybrid retrieval with confidence fallback (refs 3.1, 3.2, 3.3)`
+- `test(rag): add indexing coverage and Qdrant integration suite (refs 2.4)`
+- `feat(rag): add deterministic Qdrant indexing pipeline (refs 2.2, 2.3)`
+- `feat(rag): add metadata-enriched corpus chunker (refs 2.1)`
 - `chore(repo): replace Makefile with justfile command runner`
 - `feat(data): expand ontology corpus beyond 35 property documents`
 - `chore(ci): add lint, unit, integration, and secret-scan workflow (refs 0.6)`

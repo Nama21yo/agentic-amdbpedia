@@ -18,6 +18,6 @@ repos:
         pass_filenames: false
       - id: pytest-unit
         name: pytest unit
-        entry: uvx --with pydantic --with pydantic-settings --with pytest pytest -m "not integration and not e2e"
+        entry: uvx --with pydantic --with pydantic-settings --with pytest --with qdrant-client pytest -m "not integration and not e2e"
         language: system
         pass_filenames: false
