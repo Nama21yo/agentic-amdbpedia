@@ -22,6 +22,7 @@ dev = [
     "pre-commit>=4.2.0",
     "pytest>=8.4.0",
     "pytest-asyncio>=1.0.0",
+    "pytest-benchmark>=5.1.0",
     "pytest-cov>=6.2.0",
     "pytest-mock>=3.14.0",
     "ruff>=0.12.0",
@@ -40,7 +41,7 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["config.py", "rag", "mcp_server", "scripts", "tests"]
+files = ["config.py", "errors.py", "logging_config.py", "rag", "mcp_server", "scripts", "tests"]
 
 [[tool.mypy.overrides]]
 module = ["fastembed", "fastembed.*", "qdrant_client", "qdrant_client.*"]
@@ -52,6 +53,7 @@ pythonpath = ["."]
 markers = [
     "integration: tests that require external services such as Qdrant",
     "e2e: full end-to-end tests",
+    "perf: scheduled latency budget benchmarks",
 ]
 
 [tool.coverage.report]

@@ -14,6 +14,15 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from config import Settings
+from errors import AssistantValidationError, ClientSafeError, RetrievalUnavailableError
+from logging_config import (
+    configure_logging as configure_json_logging,
+)
+from logging_config import (
+    correlation_context,
+    get_correlation_id,
+    log_event,
+)
 from rag.retrieval import NoMatchFound, SearchResult, search
 
 LOGGER = logging.getLogger("dbpedia_mapping_assistant.mcp")
@@ -26,10 +35,6 @@ mcp = FastMCP("DBpedia-Mapping-Assistant")
 
 class StartupError(RuntimeError):
     """Raised when the MCP server cannot start safely."""
-
-
-class ToolBoundaryError(RuntimeError):
-    """Client-safe tool boundary error."""
 
 
 class MappingEntry(BaseModel):
@@ -59,9 +64,13 @@ class MappingPayload(BaseModel):
 
 
 def configure_logging() -> None:
-    logging.basicConfig(
-        level=logging.INFO, format='{"level":"%(levelname)s","message":"%(message)s"}'
-    )
+    configure_json_logging()
+
+
+def _safe_error_json(error: ClientSafeError) -> str:
+    payload = error.to_payload()
+    payload["correlation_id"] = get_correlation_id()
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def validate_startup(
@@ -111,50 +120,56 @@ def find_semantic_match_impl(
 ) -> str:
     """Search DBpedia ontology properties and return JSON for MCP clients."""
 
-    if not amharic_property.strip():
+    with correlation_context() as correlation_id:
+        log_event(LOGGER, "mcp.find_semantic_match.start", target_class=target_class)
+        if not amharic_property.strip():
+            return _safe_error_json(AssistantValidationError("amharic_property is required"))
+        if len(amharic_property) > MAX_PROPERTY_LENGTH:
+            return _safe_error_json(
+                AssistantValidationError(
+                    f"amharic_property must be at most {MAX_PROPERTY_LENGTH} characters"
+                )
+            )
+        if os.environ.get("MCP_SERVER_TEST_MODE") == "1":
+            return json.dumps(
+                {
+                    "status": "ok",
+                    "correlation_id": correlation_id,
+                    "matches": [
+                        {
+                            "property": "icaoLocationIdentifier",
+                            "class": target_class or "Airport",
+                            "score": 1.0,
+                            "payload": {"xsd_type": "xsd:string"},
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            )
+
+        try:
+            results = search_func(amharic_property, target_class=target_class)
+        except ClientSafeError as exc:
+            log_event(LOGGER, "mcp.find_semantic_match.error", error_type=exc.error_type)
+            return _safe_error_json(exc)
+        except Exception as exc:
+            log_event(LOGGER, "mcp.find_semantic_match.error", error=exc.__class__.__name__)
+            return _safe_error_json(RetrievalUnavailableError())
+
+        if not results or isinstance(results[0], NoMatchFound):
+            log_event(LOGGER, "mcp.find_semantic_match.no_match")
+            return json.dumps(
+                {"status": "no_match", "correlation_id": correlation_id, "matches": []}
+            )
+
+        matches = [
+            _result_to_payload(result) for result in results if isinstance(result, SearchResult)
+        ]
+        log_event(LOGGER, "mcp.find_semantic_match.complete", match_count=len(matches))
         return json.dumps(
-            {
-                "status": "error",
-                "error_type": "validation",
-                "message": "amharic_property is required",
-            }
-        )
-    if len(amharic_property) > MAX_PROPERTY_LENGTH:
-        return json.dumps(
-            {
-                "status": "error",
-                "error_type": "validation",
-                "message": f"amharic_property must be at most {MAX_PROPERTY_LENGTH} characters",
-            }
-        )
-    if os.environ.get("MCP_SERVER_TEST_MODE") == "1":
-        return json.dumps(
-            {
-                "status": "ok",
-                "matches": [
-                    {
-                        "property": "icaoLocationIdentifier",
-                        "class": target_class or "Airport",
-                        "score": 1.0,
-                        "payload": {"xsd_type": "xsd:string"},
-                    }
-                ],
-            },
+            {"status": "ok", "correlation_id": correlation_id, "matches": matches},
             ensure_ascii=False,
         )
-
-    try:
-        results = search_func(amharic_property, target_class=target_class)
-    except Exception as exc:
-        return json.dumps(
-            {"status": "error", "error_type": "retrieval_unavailable", "message": str(exc)}
-        )
-
-    if not results or isinstance(results[0], NoMatchFound):
-        return json.dumps({"status": "no_match", "matches": []})
-
-    matches = [_result_to_payload(result) for result in results if isinstance(result, SearchResult)]
-    return json.dumps({"status": "ok", "matches": matches}, ensure_ascii=False)
 
 
 def generate_mapping_syntax_impl(payload: MappingPayload) -> str:

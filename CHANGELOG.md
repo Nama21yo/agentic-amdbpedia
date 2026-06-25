@@ -1,5 +1,8 @@
 # Changelog
 
+- `docs(final): add demo, report script, architecture, traceability, future work (refs 8.1, 8.2, 9.5)`
+- `test(e2e): add full pipeline and scheduled latency budget gates (refs 9.3, 9.4)`
+- `feat(reliability): add structured logs, correlation IDs, typed errors, circuit breaker (refs 9.1, 9.2, 9.3)`
 - `docs(eval): add generated results report and failure-case mitigations (refs 7.4)`
 - `feat(eval): add golden queries, precision harness, and relevance harness (refs 7.1, 7.2, 7.3)`
 - `docs(mcp): add Claude Desktop config helper and handshake tests (refs 6.1, 6.2)`

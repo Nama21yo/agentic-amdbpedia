@@ -85,7 +85,9 @@ def test_find_semantic_match_no_match() -> None:
         )
     )
 
-    assert payload == {"status": "no_match", "matches": []}
+    assert payload["status"] == "no_match"
+    assert payload["matches"] == []
+    assert payload["correlation_id"]
 
 
 def test_generate_mapping_syntax_escapes_injection_attempt() -> None:

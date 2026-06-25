@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 from collections.abc import Callable
@@ -11,8 +12,11 @@ from pathlib import Path
 from typing import Any
 
 from config import Settings
+from errors import LLMUnavailableError
+from logging_config import correlation_context, log_event
 from mcp_server.server import MappingPayload, find_semantic_match_impl, generate_mapping_syntax_impl
 
+LOGGER = logging.getLogger("dbpedia_mapping_assistant.agent")
 PROMPT_PATH = Path(__file__).resolve().parent / "prompts" / "mapping_assistant.md"
 PROMPT_TEMPLATE = PROMPT_PATH.read_text(encoding="utf-8")
 MAX_REACT_ITERATIONS = 4
@@ -37,7 +41,7 @@ INJECTION_PATTERNS = [
 ]
 
 
-class GroqUnavailableError(RuntimeError):
+class GroqUnavailableError(LLMUnavailableError):
     """Raised when Groq remains unavailable after retries."""
 
 
@@ -110,11 +114,19 @@ class GroqClient:
         last_error: Exception | None = None
         for attempt in range(self.max_attempts):
             try:
+                log_event(LOGGER, "groq.request", model=model, attempt=attempt + 1)
                 return self._create(model=model, messages=messages, tools=tools)
             except Exception as exc:
                 if not _is_retryable_groq_error(exc):
                     raise
                 last_error = exc
+                log_event(
+                    LOGGER,
+                    "groq.retryable_error",
+                    model=model,
+                    attempt=attempt + 1,
+                    error=exc.__class__.__name__,
+                )
                 if attempt < self.max_attempts - 1:
                     self.sleep(0.2 * (2**attempt))
         raise GroqUnavailableError("Groq unavailable after retry budget exhausted") from last_error
@@ -227,8 +239,28 @@ def run_mapping_agent(
     tool_runner: Callable[[ToolRequest], str] | None = None,
     max_iterations: int = MAX_REACT_ITERATIONS,
 ) -> AgentResponse:
+    with correlation_context():
+        return _run_mapping_agent(
+            user_input,
+            target_class=target_class,
+            groq_client=groq_client,
+            tool_runner=tool_runner,
+            max_iterations=max_iterations,
+        )
+
+
+def _run_mapping_agent(
+    user_input: str,
+    *,
+    target_class: str | None = None,
+    groq_client: Any,
+    tool_runner: Callable[[ToolRequest], str] | None = None,
+    max_iterations: int = MAX_REACT_ITERATIONS,
+) -> AgentResponse:
     trace = [TraceEvent("classify", {"input": user_input})]
+    log_event(LOGGER, "agent.classify")
     if is_injection_attempt(user_input):
+        log_event(LOGGER, "agent.guardrail_rejection")
         return AgentResponse(
             final_answer="Rejected: prompt-injection attempt detected.",
             trace=trace,
@@ -239,7 +271,7 @@ def run_mapping_agent(
         {"role": "system", "content": PROMPT_TEMPLATE},
         {"role": "user", "content": user_input},
     ]
-    allowed_properties: set[str] = set()
+    allowed_properties: list[str] = []
     generated_xml = ""
 
     for _ in range(max_iterations):
@@ -248,6 +280,7 @@ def run_mapping_agent(
             request = _normalize_tool_request(
                 step.tool_call, user_input, target_class, allowed_properties
             )
+            log_event(LOGGER, "agent.tool_call", tool=request.name)
             observation = runner(request)
             trace.append(
                 TraceEvent(
@@ -256,7 +289,9 @@ def run_mapping_agent(
             )
             messages.append({"role": "tool", "name": request.name, "content": observation})
             if request.name == "find_semantic_match":
-                allowed_properties.update(_properties_from_match_observation(observation))
+                for prop in _properties_from_match_observation(observation):
+                    if prop not in allowed_properties:
+                        allowed_properties.append(prop)
                 if json.loads(observation).get("status") == "no_match":
                     return AgentResponse(
                         final_answer="No confident DBpedia ontology match was found.",
@@ -281,7 +316,7 @@ def _normalize_tool_request(
     request: ToolRequest,
     user_input: str,
     target_class: str | None,
-    allowed_properties: set[str],
+    allowed_properties: list[str],
 ) -> ToolRequest:
     if request.name == "find_semantic_match":
         arguments = dict(request.arguments)
@@ -299,25 +334,25 @@ def _normalize_tool_request(
                     continue
                 ontology_property = mapping.get("ontologyProperty")
                 if allowed_properties and ontology_property not in allowed_properties:
-                    mapping["ontologyProperty"] = sorted(allowed_properties)[0]
+                    mapping["ontologyProperty"] = allowed_properties[0]
         return ToolRequest(name=request.name, arguments=arguments)
 
     return request
 
 
-def _properties_from_match_observation(observation: str) -> set[str]:
+def _properties_from_match_observation(observation: str) -> list[str]:
     try:
         payload = json.loads(observation)
     except json.JSONDecodeError:
-        return set()
+        return []
     matches = payload.get("matches", [])
     if not isinstance(matches, list):
-        return set()
-    return {
+        return []
+    return [
         str(match["property"])
         for match in matches
         if isinstance(match, dict) and isinstance(match.get("property"), str)
-    }
+    ]
 
 
 def default_tool_runner(request: ToolRequest) -> str:
