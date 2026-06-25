@@ -17,6 +17,8 @@ REQUIRED_PROPERTY_FIELDS = (
     "mapping convention",
     "source_url",
 )
+MIN_CLASS_FILES = 9
+MIN_PROPERTY_DOCUMENTS = 35
 
 
 @dataclass(frozen=True)
@@ -136,15 +138,17 @@ def validate_aliases(
 
 def validate_corpus(corpus_dir: Path) -> list[PropertyDocument]:
     markdown_files = class_markdown_files(corpus_dir)
-    if len(markdown_files) < 7:
+    if len(markdown_files) < MIN_CLASS_FILES:
         raise CorpusValidationError(
-            f"{corpus_dir}:1: expected at least 7 class markdown files, found {len(markdown_files)}"
+            f"{corpus_dir}:1: expected at least {MIN_CLASS_FILES} class markdown files, "
+            f"found {len(markdown_files)}"
         )
 
     documents = [document for path in markdown_files for document in parse_property_documents(path)]
-    if len(documents) < 20:
+    if len(documents) < MIN_PROPERTY_DOCUMENTS:
         raise CorpusValidationError(
-            f"{corpus_dir}:1: expected at least 20 property documents, found {len(documents)}"
+            f"{corpus_dir}:1: expected at least {MIN_PROPERTY_DOCUMENTS} property documents, "
+            f"found {len(documents)}"
         )
 
     validate_property_documents(documents)

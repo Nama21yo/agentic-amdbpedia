@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Any
 
 from scripts.validate_corpus import (
+    MIN_CLASS_FILES,
+    MIN_PROPERTY_DOCUMENTS,
     REQUIRED_PROPERTY_FIELDS,
     class_markdown_files,
     load_aliases,
@@ -17,12 +19,12 @@ DATA_DIR = PROJECT_ROOT / "data"
 
 
 def test_minimum_document_count() -> None:
-    assert len(class_markdown_files(DATA_DIR)) >= 7
+    assert len(class_markdown_files(DATA_DIR)) >= MIN_CLASS_FILES
 
 
 def test_minimum_property_count() -> None:
     documents = validate_corpus(DATA_DIR)
-    assert len(documents) >= 20
+    assert len(documents) >= MIN_PROPERTY_DOCUMENTS
 
 
 def test_property_entries_have_required_fields() -> None:

@@ -23,7 +23,7 @@ def run_validator(corpus_dir: Path) -> subprocess.CompletedProcess[str]:
 def test_validate_corpus_cli_success() -> None:
     result = run_validator(DATA_DIR)
     assert result.returncode == 0, result.stderr
-    assert "Validated 7 classes and 28 properties" in result.stdout
+    assert "Validated 9 classes and 36 properties" in result.stdout
 
 
 def test_validate_corpus_cli_reports_missing_required_field(tmp_path: Path) -> None:

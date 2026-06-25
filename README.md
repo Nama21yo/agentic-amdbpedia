@@ -32,6 +32,6 @@ cross-lingual and acronym cases.
 ## Development
 
 ```bash
-uv run pytest
-uv run python scripts/validate_corpus.py data
+just test
+just validate-corpus
 ```
