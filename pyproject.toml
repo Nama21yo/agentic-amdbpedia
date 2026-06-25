@@ -19,6 +19,7 @@ dependencies = [
 dev = [
     "hypothesis>=6.135.0",
     "mypy>=1.16.0",
+    "pre-commit>=4.2.0",
     "pytest>=8.4.0",
     "pytest-asyncio>=1.0.0",
     "pytest-mock>=3.14.0",
@@ -32,5 +33,18 @@ package = false
 line-length = 100
 target-version = "py311"
 
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["config.py", "rag", "mcp_server", "scripts", "tests"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "integration: tests that require external services such as Qdrant",
+    "e2e: full end-to-end tests",
+]
