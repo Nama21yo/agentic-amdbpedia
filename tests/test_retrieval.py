@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from rag.embeddings import SparseVector, deterministic_dense_vector, lexical_sparse_vector
 from rag.retrieval import NoMatchFound, SearchResult, encode_query, search
 
@@ -77,6 +79,24 @@ def test_search_uses_qdrant_native_rrf_prefetch() -> None:
     assert {prefetch.using for prefetch in client.prefetch} == {"dense", "sparse"}
     assert client.query.__class__.__name__ == "FusionQuery"
     assert str(client.query.fusion).lower().endswith("rrf")
+
+
+def test_search_with_custom_embedders_does_not_require_groq_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+
+    results = search(
+        "አይካኦ_ኮድ ICAO",
+        target_class="Airport",
+        client=FakeClient(),
+        dense_embedder=lambda text: deterministic_dense_vector(text, size=16),
+        sparse_embedder=lexical_sparse_vector,
+        confidence_threshold=0.1,
+    )
+
+    assert isinstance(results[0], SearchResult)
+    assert results[0].property == "icaoLocationIdentifier"
 
 
 def test_search_low_score_returns_no_match() -> None:

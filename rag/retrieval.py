@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from dataclasses import dataclass
 from functools import partial
 from typing import Any
 
-from config import Settings
+from config import (
+    DEFAULT_DENSE_MODEL,
+    DEFAULT_EMBEDDING_DEVICE,
+    DEFAULT_RETRIEVAL_CONFIDENCE_THRESHOLD,
+    DEFAULT_SPARSE_MODEL,
+    Settings,
+)
 from errors import RetrievalUnavailableError
 from logging_config import log_event
 from rag.embeddings import (
@@ -110,6 +117,43 @@ def _payload_string(payload: dict[str, Any], key: str) -> str:
     return value if isinstance(value, str) else ""
 
 
+@dataclass(frozen=True)
+class RetrievalSettings:
+    embedding_model_dense: str
+    embedding_model_sparse: str
+    embedding_device: str
+    retrieval_confidence_threshold: float
+
+
+def _env_float(name: str, default: float) -> float:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        return default
+
+
+def _retrieval_settings(settings: Settings | None) -> RetrievalSettings:
+    if settings is not None:
+        return RetrievalSettings(
+            embedding_model_dense=settings.embedding_model_dense,
+            embedding_model_sparse=settings.embedding_model_sparse,
+            embedding_device=settings.embedding_device,
+            retrieval_confidence_threshold=settings.retrieval_confidence_threshold,
+        )
+
+    return RetrievalSettings(
+        embedding_model_dense=os.environ.get("EMBEDDING_MODEL_DENSE", DEFAULT_DENSE_MODEL),
+        embedding_model_sparse=os.environ.get("EMBEDDING_MODEL_SPARSE", DEFAULT_SPARSE_MODEL),
+        embedding_device=os.environ.get("EMBEDDING_DEVICE", DEFAULT_EMBEDDING_DEVICE),
+        retrieval_confidence_threshold=_env_float(
+            "RETRIEVAL_CONFIDENCE_THRESHOLD", DEFAULT_RETRIEVAL_CONFIDENCE_THRESHOLD
+        ),
+    )
+
+
 def search(
     query: str,
     *,
@@ -134,7 +178,7 @@ def search(
 
     from qdrant_client import models
 
-    resolved_settings = settings or Settings()
+    resolved_settings = _retrieval_settings(settings)
     threshold = (
         confidence_threshold
         if confidence_threshold is not None
@@ -153,7 +197,7 @@ def search(
         dense_embedder=dense_embedder,
         sparse_embedder=sparse_embedder,
     )
-    resolved_client = client or qdrant_client_from_settings(resolved_settings)
+    resolved_client = client or qdrant_client_from_settings(settings)
     query_filter = _class_filter(target_class)
     try:
         response = resolved_client.query_points(
