@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,7 @@ from rag.indexing import (
     DEFAULT_COLLECTION_NAME,
     build_points,
     chunk_corpus,
+    configured_embedders,
     create_collection,
     index_corpus,
     qdrant_client_from_settings,
@@ -18,6 +20,22 @@ from scripts.validate_corpus import parse_property_documents
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
+
+
+def test_configured_embedders_use_environment_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("EMBEDDING_MODEL_DENSE", "intfloat/multilingual-e5-small")
+    monkeypatch.setenv("EMBEDDING_DEVICE", "cpu")
+    monkeypatch.setenv("EMBEDDING_MODEL_SPARSE", "Qdrant/bm25")
+
+    dense_embedder, sparse_embedder = configured_embedders()
+
+    assert isinstance(dense_embedder, partial)
+    assert isinstance(sparse_embedder, partial)
+    assert dense_embedder.keywords == {
+        "device": "cpu",
+        "model_name": "intfloat/multilingual-e5-small",
+    }
+    assert sparse_embedder.keywords == {"model_name": "Qdrant/bm25"}
 
 
 class FakeClient:

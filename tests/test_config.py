@@ -13,6 +13,7 @@ def clear_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "QDRANT_API_KEY",
         "EMBEDDING_MODEL_DENSE",
         "EMBEDDING_MODEL_SPARSE",
+        "EMBEDDING_DEVICE",
         "GROQ_MODEL_FAST",
         "GROQ_MODEL_REASONING",
         "RETRIEVAL_CONFIDENCE_THRESHOLD",
@@ -32,7 +33,8 @@ def test_settings_load_valid_environment(monkeypatch: pytest.MonkeyPatch) -> Non
     assert settings.groq_api_key == "gsk_test_placeholder"
     assert settings.qdrant_url == "http://qdrant:6333"
     assert settings.qdrant_api_key == "test-qdrant-key"
-    assert settings.embedding_model_dense == "BAAI/bge-m3"
+    assert settings.embedding_model_dense == "intfloat/multilingual-e5-small"
+    assert settings.embedding_device == "cpu"
     assert settings.retrieval_confidence_threshold == 0.42
 
 

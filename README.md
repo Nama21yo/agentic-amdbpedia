@@ -19,7 +19,7 @@ generates MediaWiki XML and exposes live benchmark resources.
 ```mermaid
 flowchart LR
     A[Amharic infobox field] --> B[Input validation and injection guardrail]
-    B --> C[Dense encoder: BAAI/bge-m3]
+    B --> C[Dense encoder: intfloat/multilingual-e5-small]
     B --> D[Sparse lexical encoder]
     C --> E[Qdrant hybrid RRF search]
     D --> E
@@ -33,8 +33,11 @@ flowchart LR
 
 The implemented flow is: Amharic query -> sanitizer -> dense/sparse encoders ->
 Qdrant hybrid search -> grounded ReAct agent -> MCP tools -> deterministic XML or
-explicit refusal. Structured JSON logs carry a correlation ID across MCP, RAG,
-and agent layers.
+explicit refusal. Dense retrieval uses `intfloat/multilingual-e5-small` locally
+on CPU by default, with E5 `query:` prefixes for user searches and `passage:`
+prefixes for ontology chunks; sparse retrieval stays enabled for exact acronym
+rescue. Structured JSON logs carry a correlation ID across MCP, RAG, and agent
+layers.
 
 ## Development
 

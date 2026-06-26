@@ -3,17 +3,21 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any
+from typing import Any, Literal
 
 DENSE_VECTOR_NAME = "dense"
 SPARSE_VECTOR_NAME = "sparse"
-DEFAULT_DENSE_MODEL = "BAAI/bge-m3"
+DEFAULT_DENSE_MODEL = "intfloat/multilingual-e5-small"
 DEFAULT_SPARSE_MODEL = "Qdrant/bm25"
-DEFAULT_DENSE_VECTOR_SIZE = 1024
+DEFAULT_DENSE_VECTOR_SIZE = 384
+DEFAULT_EMBEDDING_DEVICE = "cpu"
+E5_MODEL_MARKERS = ("e5-small", "e5-base", "e5-large", "multilingual-e5")
+SENTENCE_TRANSFORMER_DENSE_MODELS = (DEFAULT_DENSE_MODEL, "BAAI/bge-m3")
 TOKEN_RE = re.compile(r"[\w\u1200-\u137f]+", re.UNICODE)
 
 
@@ -27,6 +31,7 @@ class SparseVector:
 
 DenseEmbedder = Callable[[str], list[float]]
 SparseEmbedder = Callable[[str], SparseVector]
+DenseInputType = Literal["query", "passage"]
 
 
 def lexical_sparse_vector(text: str, *, buckets: int = 65536) -> SparseVector:
@@ -64,12 +69,34 @@ def deterministic_dense_vector(text: str, *, size: int = 16) -> list[float]:
     return [value / norm for value in vector]
 
 
+def _uses_e5_prefixes(model_name: str) -> bool:
+    normalized_name = model_name.casefold()
+    return any(marker in normalized_name for marker in E5_MODEL_MARKERS)
+
+
+def dense_embedding_text(
+    text: str,
+    *,
+    model_name: str = DEFAULT_DENSE_MODEL,
+    input_type: DenseInputType = "passage",
+) -> str:
+    """Apply model-specific dense embedding formatting."""
+
+    if not _uses_e5_prefixes(model_name):
+        return text
+
+    stripped = text.lstrip()
+    if stripped.startswith(("query:", "passage:")):
+        return text
+    return f"{input_type}: {text}"
+
+
 @lru_cache(maxsize=4)
-def _dense_model(model_name: str) -> Any:
-    if model_name == DEFAULT_DENSE_MODEL:
+def _dense_model(model_name: str, device: str) -> Any:
+    if model_name in SENTENCE_TRANSFORMER_DENSE_MODELS:
         from sentence_transformers import SentenceTransformer
 
-        return SentenceTransformer(model_name)
+        return SentenceTransformer(model_name, device=device)
 
     from fastembed import TextEmbedding
 
@@ -83,15 +110,43 @@ def _sparse_model(model_name: str) -> Any:
     return SparseTextEmbedding(model_name=model_name, lazy_load=True)
 
 
-def embed_dense(text: str, model_name: str = DEFAULT_DENSE_MODEL) -> list[float]:
+def _embed_dense(
+    text: str,
+    *,
+    model_name: str = DEFAULT_DENSE_MODEL,
+    input_type: DenseInputType = "passage",
+    device: str | None = None,
+) -> list[float]:
     """Embed text with the configured dense model."""
 
-    model = _dense_model(model_name)
+    formatted_text = dense_embedding_text(text, model_name=model_name, input_type=input_type)
+    resolved_device = device or os.environ.get("EMBEDDING_DEVICE", DEFAULT_EMBEDDING_DEVICE)
+    model = _dense_model(model_name, resolved_device)
     if hasattr(model, "encode"):
-        embedding = model.encode(text, normalize_embeddings=True)
+        embedding = model.encode(formatted_text, normalize_embeddings=True)
         return [float(value) for value in embedding.tolist()]
-    embedding = next(model.query_embed([text]))
+    embedding = next(model.query_embed([formatted_text]))
     return [float(value) for value in embedding.tolist()]
+
+
+def embed_dense(
+    text: str,
+    model_name: str = DEFAULT_DENSE_MODEL,
+    device: str | None = None,
+) -> list[float]:
+    """Embed an ontology corpus chunk for dense retrieval."""
+
+    return _embed_dense(text, model_name=model_name, input_type="passage", device=device)
+
+
+def embed_query_dense(
+    text: str,
+    model_name: str = DEFAULT_DENSE_MODEL,
+    device: str | None = None,
+) -> list[float]:
+    """Embed a user query for dense retrieval."""
+
+    return _embed_dense(text, model_name=model_name, input_type="query", device=device)
 
 
 def embed_sparse(text: str, model_name: str = DEFAULT_SPARSE_MODEL) -> SparseVector:

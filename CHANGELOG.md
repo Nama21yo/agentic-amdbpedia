@@ -1,5 +1,6 @@
 # Changelog
 
+- `feat(rag): switch local dense embeddings to multilingual e5 small`
 - `fix(mcp): generate Claude Desktop config with explicit uv project`
 - `fix(indexing): support direct script execution and bge-m3 dense loading`
 - `docs(demo): expand Claude Desktop demo runbook with full setup and presenter flow`

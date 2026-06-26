@@ -9,6 +9,7 @@ import sys
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +18,10 @@ if __package__ in {None, ""}:
 
 from config import Settings
 from rag.embeddings import (
+    DEFAULT_DENSE_MODEL,
     DEFAULT_DENSE_VECTOR_SIZE,
+    DEFAULT_EMBEDDING_DEVICE,
+    DEFAULT_SPARSE_MODEL,
     DENSE_VECTOR_NAME,
     SPARSE_VECTOR_NAME,
     DenseEmbedder,
@@ -214,6 +218,18 @@ def upsert_chunks(
         client.upsert(collection_name=collection_name, points=points, wait=True)
 
 
+def configured_embedders() -> tuple[DenseEmbedder, SparseEmbedder]:
+    """Build production embedders from environment defaults without requiring Groq config."""
+
+    dense_model = os.environ.get("EMBEDDING_MODEL_DENSE", DEFAULT_DENSE_MODEL)
+    embedding_device = os.environ.get("EMBEDDING_DEVICE", DEFAULT_EMBEDDING_DEVICE)
+    sparse_model = os.environ.get("EMBEDDING_MODEL_SPARSE", DEFAULT_SPARSE_MODEL)
+    return (
+        partial(embed_dense, model_name=dense_model, device=embedding_device),
+        partial(embed_sparse, model_name=sparse_model),
+    )
+
+
 def index_corpus(
     *,
     data_dir: Path | str = "data",
@@ -224,6 +240,9 @@ def index_corpus(
     sparse_embedder: SparseEmbedder = embed_sparse,
     client: Any | None = None,
 ) -> int:
+    if dense_embedder is embed_dense and sparse_embedder is embed_sparse:
+        dense_embedder, sparse_embedder = configured_embedders()
+
     resolved_client = client or qdrant_client_from_settings()
     chunks = chunk_corpus(data_dir)
     create_collection(

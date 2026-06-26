@@ -19,8 +19,11 @@ class Settings(BaseSettings):
     groq_api_key: str = Field(alias="GROQ_API_KEY")
     qdrant_url: str = Field(default="http://localhost:6333", alias="QDRANT_URL")
     qdrant_api_key: str | None = Field(default=None, alias="QDRANT_API_KEY")
-    embedding_model_dense: str = Field(default="BAAI/bge-m3", alias="EMBEDDING_MODEL_DENSE")
+    embedding_model_dense: str = Field(
+        default="intfloat/multilingual-e5-small", alias="EMBEDDING_MODEL_DENSE"
+    )
     embedding_model_sparse: str = Field(default="Qdrant/bm25", alias="EMBEDDING_MODEL_SPARSE")
+    embedding_device: str = Field(default="cpu", alias="EMBEDDING_DEVICE")
     groq_model_fast: str = Field(default="llama-3.1-8b-instant", alias="GROQ_MODEL_FAST")
     groq_model_reasoning: str = Field(
         default="llama-3.3-70b-versatile", alias="GROQ_MODEL_REASONING"

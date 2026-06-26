@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
+from functools import partial
 from typing import Any
 
 from config import Settings
@@ -16,7 +17,7 @@ from rag.embeddings import (
     DenseEmbedder,
     SparseEmbedder,
     SparseVector,
-    embed_dense,
+    embed_query_dense,
     embed_sparse,
     qdrant_sparse_vector,
 )
@@ -77,7 +78,7 @@ DEFAULT_CIRCUIT_BREAKER = RetrievalCircuitBreaker()
 def encode_query(
     amharic_text: str,
     *,
-    dense_embedder: DenseEmbedder = embed_dense,
+    dense_embedder: DenseEmbedder = embed_query_dense,
     sparse_embedder: SparseEmbedder = embed_sparse,
 ) -> tuple[list[float], SparseVector]:
     """Encode a query with the exact same embedders used for indexing."""
@@ -117,7 +118,7 @@ def search(
     collection_name: str = DEFAULT_COLLECTION_NAME,
     confidence_threshold: float | None = None,
     client: Any | None = None,
-    dense_embedder: DenseEmbedder = embed_dense,
+    dense_embedder: DenseEmbedder = embed_query_dense,
     sparse_embedder: SparseEmbedder = embed_sparse,
     settings: Settings | None = None,
     circuit_breaker: RetrievalCircuitBreaker | None = DEFAULT_CIRCUIT_BREAKER,
@@ -133,12 +134,20 @@ def search(
 
     from qdrant_client import models
 
-    resolved_settings = settings
+    resolved_settings = settings or Settings()
     threshold = (
         confidence_threshold
         if confidence_threshold is not None
-        else (resolved_settings or Settings()).retrieval_confidence_threshold
+        else resolved_settings.retrieval_confidence_threshold
     )
+    if dense_embedder is embed_query_dense:
+        dense_embedder = partial(
+            embed_query_dense,
+            model_name=resolved_settings.embedding_model_dense,
+            device=resolved_settings.embedding_device,
+        )
+    if sparse_embedder is embed_sparse:
+        sparse_embedder = partial(embed_sparse, model_name=resolved_settings.embedding_model_sparse)
     dense_vector, sparse_vector = encode_query(
         query,
         dense_embedder=dense_embedder,

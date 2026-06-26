@@ -140,7 +140,11 @@ What to explain:
 
 - Each property becomes a proposition chunk such as:
   `Class: Airport | Property: runwayLength | Type: xsd:double | Description: ...`
-- Dense vectors handle semantic matching.
+- Dense vectors use local `intfloat/multilingual-e5-small`, with `passage:`
+  added before ontology chunks during indexing.
+- User searches use same model with E5 `query:` prefix during retrieval.
+- Embedding runs on CPU by default through `EMBEDDING_DEVICE=cpu`, avoiding
+  unsupported local CUDA/GPU setups during demo.
 - Sparse vectors preserve exact tokens and acronyms.
 - Payload metadata stores class, property name, type, aliases, and source URL.
 
@@ -449,8 +453,10 @@ uv run python rag/indexing.py --rebuild
 ```
 
 If `uv run python rag/indexing.py --rebuild` downloads embedding models during
-the demo, explain that the first run may take longer because the dense and
-sparse embedding models are being cached locally.
+the demo, explain that the first run may take longer because
+`intfloat/multilingual-e5-small` and sparse embedding models are being cached
+locally. The dense model is intentionally lighter than `BAAI/bge-m3`, so it is
+realistic for a 15-20 minute local demo.
 
 If GitHub Actions is mentioned:
 
