@@ -36,6 +36,10 @@ def generate_results_markdown(
             f"{precision.get('evaluated_queries', 'n/a')} |"
         ),
         (
+            f"| Precision@1 | {precision.get('precision_at_1', 'n/a')} | "
+            f"{precision.get('evaluated_queries', 'n/a')} |"
+        ),
+        (
             f"| Mean answer relevance | {relevance.get('mean_relevance', 'n/a')} | "
             f"{relevance.get('evaluated_queries', 'n/a')} |"
         ),

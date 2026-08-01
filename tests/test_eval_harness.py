@@ -15,6 +15,7 @@ def test_results_md_generation_is_deterministic(tmp_path: Path) -> None:
             {
                 "status": "ok",
                 "hits_at_3": 1.0,
+                "precision_at_1": 1.0,
                 "evaluated_queries": 1,
                 "breakdown": [
                     {
@@ -53,6 +54,7 @@ def test_results_md_generation_is_deterministic(tmp_path: Path) -> None:
     second = generate_results_markdown(precision_path=precision, relevance_path=relevance)
 
     assert first == second == output.read_text(encoding="utf-8")
+    assert "| Precision@1 | 1.0 | 1 |" in first
     assert "manual_1_to_5` (1/1 manually reviewed)" in first
     assert "Acronym Collision Failure" in first
     assert "Data-Type Hallucination" in first

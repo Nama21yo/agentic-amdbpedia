@@ -72,6 +72,7 @@ and restart Claude Desktop. The server exposes `find_semantic_match`,
 
 - Golden query set: `evaluation/test_queries.json`
 - Precision harness: `evaluation/run_precision_eval.py`
+- Retrieval metrics: Precision@1 and Hits@3 over the 8 positive golden queries
 - Relevance harness: `evaluation/run_relevance_eval.py`
 - Manual 1-5 review evidence: `evaluation/human_overrides.csv`
 - Generated report: `evaluation/results.md`

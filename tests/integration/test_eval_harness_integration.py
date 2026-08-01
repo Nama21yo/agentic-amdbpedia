@@ -40,7 +40,40 @@ def test_precision_harness_writes_valid_metrics_file(tmp_path: Path) -> None:
 
     assert output.exists()
     assert payload["hits_at_3"] == 1.0
+    assert payload["precision_at_1"] == 1.0
+    assert all(item["top_1_correct"] for item in payload["breakdown"])
     assert len(payload["breakdown"]) == 8
+
+
+def test_precision_at_1_distinguishes_top_rank_from_hits_at_3(tmp_path: Path) -> None:
+    output = tmp_path / "latest_metrics.json"
+
+    def search_func(query: str, target_class: str | None, _top_k: int) -> list[RetrievalResult]:
+        queries = json.loads(QUERY_PATH.read_text(encoding="utf-8"))
+        expected = next(item["expected_property"] for item in queries if item["query"] == query)
+        return [
+            SearchResult(
+                property="wrongTopResult",
+                ontology_class=str(target_class),
+                score=1.0,
+                payload={},
+            ),
+            SearchResult(
+                property=str(expected),
+                ontology_class=str(target_class),
+                score=0.9,
+                payload={},
+            ),
+        ]
+
+    payload = run_precision_eval(
+        query_path=QUERY_PATH,
+        output_path=output,
+        search_func=search_func,
+    )
+
+    assert payload["hits_at_3"] == 1.0
+    assert payload["precision_at_1"] == 0.0
 
 
 def test_relevance_harness_produces_score_per_query(tmp_path: Path) -> None:

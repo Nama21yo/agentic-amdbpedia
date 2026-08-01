@@ -1,4 +1,4 @@
-"""Run Hits@3 precision evaluation over golden retrieval queries."""
+"""Run Precision@1 and Hits@3 evaluation over golden retrieval queries."""
 
 from __future__ import annotations
 
@@ -38,13 +38,16 @@ def run_precision_eval(
     queries = [query for query in load_queries(query_path) if not query["is_adversarial"]]
     breakdown: list[dict[str, Any]] = []
     hits = 0
+    top_1_hits = 0
 
     for item in queries:
         results = search_func(item["query"], item["target_class"], top_k)
         properties = [result.property for result in results if isinstance(result, SearchResult)]
         no_match = any(isinstance(result, NoMatchFound) for result in results)
         hit = item["expected_property"] in properties
+        top_1_correct = bool(properties and item["expected_property"] == properties[0])
         hits += int(hit)
+        top_1_hits += int(top_1_correct)
         breakdown.append(
             {
                 "id": item["id"],
@@ -54,6 +57,7 @@ def run_precision_eval(
                 "top_properties": properties,
                 "no_match": no_match,
                 "hit": hit,
+                "top_1_correct": top_1_correct,
             }
         )
 
@@ -61,6 +65,7 @@ def run_precision_eval(
         "status": "ok",
         "metric": "hits_at_3",
         "hits_at_3": hits / len(queries) if queries else 0.0,
+        "precision_at_1": top_1_hits / len(queries) if queries else 0.0,
         "evaluated_queries": len(queries),
         "breakdown": breakdown,
     }

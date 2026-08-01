@@ -2,6 +2,7 @@
   "status": "ok",
   "metric": "hits_at_3",
   "hits_at_3": 1.0,
+  "precision_at_1": 1.0,
   "evaluated_queries": 8,
   "breakdown": [
     {
@@ -9,72 +10,112 @@
       "query": "አይካኦ_ኮድ ICAO",
       "target_class": "Airport",
       "expected_property": "icaoLocationIdentifier",
-      "top_properties": ["icaoLocationIdentifier"],
+      "top_properties": [
+        "icaoLocationIdentifier",
+        "iataLocationIdentifier",
+        "elevation"
+      ],
       "no_match": false,
-      "hit": true
+      "hit": true,
+      "top_1_correct": true
     },
     {
       "id": "airport_iata",
       "query": "አያታ_ኮድ IATA",
       "target_class": "Airport",
       "expected_property": "iataLocationIdentifier",
-      "top_properties": ["iataLocationIdentifier"],
+      "top_properties": [
+        "iataLocationIdentifier",
+        "icaoLocationIdentifier",
+        "elevation"
+      ],
       "no_match": false,
-      "hit": true
+      "hit": true,
+      "top_1_correct": true
     },
     {
       "id": "airport_runway",
       "query": "የመሮጫ_መንገድ_ርዝመት",
       "target_class": "Airport",
       "expected_property": "runwayLength",
-      "top_properties": ["runwayLength"],
+      "top_properties": [
+        "runwayLength",
+        "elevation",
+        "iataLocationIdentifier"
+      ],
       "no_match": false,
-      "hit": true
+      "hit": true,
+      "top_1_correct": true
     },
     {
       "id": "dam_height",
       "query": "የግድብ_ከፍታ",
       "target_class": "Dam",
       "expected_property": "height",
-      "top_properties": ["height"],
+      "top_properties": [
+        "height",
+        "status",
+        "length"
+      ],
       "no_match": false,
-      "hit": true
+      "hit": true,
+      "top_1_correct": true
     },
     {
       "id": "dam_opening",
       "query": "የግድብ_መክፈቻ_ቀን",
       "target_class": "Dam",
       "expected_property": "openingDate",
-      "top_properties": ["openingDate"],
+      "top_properties": [
+        "openingDate",
+        "status",
+        "height"
+      ],
       "no_match": false,
-      "hit": true
+      "hit": true,
+      "top_1_correct": true
     },
     {
       "id": "artist_stage_name",
       "query": "የመድረክ_ስም",
       "target_class": "MusicalArtist",
       "expected_property": "alias",
-      "top_properties": ["alias"],
+      "top_properties": [
+        "alias",
+        "birthName",
+        "activeYearsStartYear"
+      ],
       "no_match": false,
-      "hit": true
+      "hit": true,
+      "top_1_correct": true
     },
     {
       "id": "artist_birth_name",
       "query": "የትውልድ_ስም",
       "target_class": "MusicalArtist",
       "expected_property": "birthName",
-      "top_properties": ["birthName"],
+      "top_properties": [
+        "birthName",
+        "alias",
+        "activeYearsStartYear"
+      ],
       "no_match": false,
-      "hit": true
+      "hit": true,
+      "top_1_correct": true
     },
     {
       "id": "artist_active_start",
       "query": "የስራ_መጀመሪያ_ዓመት",
       "target_class": "MusicalArtist",
       "expected_property": "activeYearsStartYear",
-      "top_properties": ["activeYearsStartYear"],
+      "top_properties": [
+        "activeYearsStartYear",
+        "activeYearsEndYear",
+        "birthName"
+      ],
       "no_match": false,
-      "hit": true
+      "hit": true,
+      "top_1_correct": true
     }
   ]
 }

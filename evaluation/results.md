@@ -5,6 +5,7 @@
 | Metric | Value | Queries |
 |---|---:|---:|
 | Hits@3 | 1.0 | 8 |
+| Precision@1 | 1.0 | 8 |
 | Mean answer relevance | 4.8 | 10 |
 
 Answer relevance method: `manual_1_to_5` (10/10 manually reviewed).
@@ -13,14 +14,14 @@ Answer relevance method: `manual_1_to_5` (10/10 manually reviewed).
 
 | Query ID | Expected | Top Properties | Hit |
 |---|---|---|---|
-| airport_icao | icaoLocationIdentifier | icaoLocationIdentifier | True |
-| airport_iata | iataLocationIdentifier | iataLocationIdentifier | True |
-| airport_runway | runwayLength | runwayLength | True |
-| dam_height | height | height | True |
-| dam_opening | openingDate | openingDate | True |
-| artist_stage_name | alias | alias | True |
-| artist_birth_name | birthName | birthName | True |
-| artist_active_start | activeYearsStartYear | activeYearsStartYear | True |
+| airport_icao | icaoLocationIdentifier | icaoLocationIdentifier, iataLocationIdentifier, elevation | True |
+| airport_iata | iataLocationIdentifier | iataLocationIdentifier, icaoLocationIdentifier, elevation | True |
+| airport_runway | runwayLength | runwayLength, elevation, iataLocationIdentifier | True |
+| dam_height | height | height, status, length | True |
+| dam_opening | openingDate | openingDate, status, height | True |
+| artist_stage_name | alias | alias, birthName, activeYearsStartYear | True |
+| artist_birth_name | birthName | birthName, alias, activeYearsStartYear | True |
+| artist_active_start | activeYearsStartYear | activeYearsStartYear, activeYearsEndYear, birthName | True |
 
 ## Answer Relevance Detail
 
