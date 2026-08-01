@@ -44,8 +44,11 @@ def load_human_overrides(path: Path = DEFAULT_OVERRIDES_PATH) -> dict[str, Judge
             query_id = row.get("id", "").strip()
             if not query_id or not row.get("score"):
                 continue
+            score = int(row["score"])
+            if not 1 <= score <= 5:
+                raise ValueError(f"manual score for {query_id!r} must be between 1 and 5")
             overrides[query_id] = JudgeResult(
-                score=int(row["score"]),
+                score=score,
                 rationale=row.get("rationale", "human override").strip() or "human override",
             )
     return overrides
@@ -131,9 +134,14 @@ def run_relevance_eval(
         )
 
     mean_score = sum(item["score"] for item in breakdown) / len(breakdown) if breakdown else 0.0
+    manual_reviews = sum(item["source"] == "human_override" for item in breakdown)
     payload = {
         "status": "ok",
         "metric": "answer_relevance_1_to_5",
+        "review_method": (
+            "manual_1_to_5" if breakdown and manual_reviews == len(breakdown) else "mixed"
+        ),
+        "manual_reviews": manual_reviews,
         "mean_relevance": mean_score,
         "evaluated_queries": len(breakdown),
         "breakdown": breakdown,

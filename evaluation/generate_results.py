@@ -40,6 +40,12 @@ def generate_results_markdown(
             f"{relevance.get('evaluated_queries', 'n/a')} |"
         ),
         "",
+        (
+            f"Answer relevance method: `{relevance.get('review_method', 'unknown')}` "
+            f"({relevance.get('manual_reviews', 0)}/"
+            f"{relevance.get('evaluated_queries', 'n/a')} manually reviewed)."
+        ),
+        "",
         "## Retrieval Detail",
         "",
         "| Query ID | Expected | Top Properties | Hit |",

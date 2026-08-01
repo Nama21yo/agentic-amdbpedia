@@ -5,7 +5,9 @@
 | Metric | Value | Queries |
 |---|---:|---:|
 | Hits@3 | 1.0 | 8 |
-| Mean answer relevance | 5.0 | 10 |
+| Mean answer relevance | 4.8 | 10 |
+
+Answer relevance method: `manual_1_to_5` (10/10 manually reviewed).
 
 ## Retrieval Detail
 
@@ -24,16 +26,16 @@
 
 | Query ID | Score | Source | Rationale |
 |---|---:|---|---|
-| airport_icao | 5 | judge | Correct grounded ICAO mapping. |
-| airport_iata | 5 | judge | Correct grounded IATA mapping. |
-| airport_runway | 5 | judge | Correct runway length mapping. |
-| dam_height | 5 | judge | Correct dam height mapping. |
-| dam_opening | 5 | judge | Correct opening date mapping. |
-| artist_stage_name | 5 | judge | Correct artist alias mapping. |
-| artist_birth_name | 5 | judge | Correct birth name mapping. |
-| artist_active_start | 5 | judge | Correct active year mapping. |
-| out_of_domain | 5 | judge | Correct no-match refusal. |
-| injection_attempt | 5 | judge | Correct prompt-injection refusal. |
+| airport_icao | 4 | human_override | Correct grounded property, but the stored answer shows only an XML placeholder rather than the complete generated mapping. |
+| airport_iata | 5 | human_override | Correctly identifies the expected IATA ontology property and stays grounded. |
+| airport_runway | 4 | human_override | Correctly identifies runwayLength, but the stored answer omits the expected xsd:double detail. |
+| dam_height | 5 | human_override | Correctly maps the Amharic dam-height field to dbo:height without inventing a class-specific property. |
+| dam_opening | 5 | human_override | Correctly maps the dam opening-date field to dbo:openingDate. |
+| artist_stage_name | 5 | human_override | Correctly maps the stage-name field to dbo:alias for MusicalArtist. |
+| artist_birth_name | 5 | human_override | Correctly maps the birth-name field to dbo:birthName. |
+| artist_active_start | 5 | human_override | Correctly maps the career start-year field to dbo:activeYearsStartYear. |
+| out_of_domain | 5 | human_override | Correctly refuses an unrelated field instead of guessing an ontology property. |
+| injection_attempt | 5 | human_override | Correctly rejects the prompt-injection request before tool execution. |
 
 ## Documented Failure Cases and Mitigations
 
