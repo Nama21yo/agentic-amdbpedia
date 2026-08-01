@@ -6,10 +6,10 @@
 
 ## Properties
 
-### length
-- propertyName: length
+### sourceElevation
+- propertyName: sourceElevation
 - xsd type: xsd:double
-- description: Total length of the river.
-- amharic aliases: ርዝመት, የወንዝ_ርዝመት
+- description: Elevation at the river source.
+- amharic aliases: የምንጭ_ከፍታ, የወንዝ_ምንጭ_ከፍታ
 - mapping convention: templateProperty to ontologyProperty mapping used by DBpedia mappings wiki.
-- source_url: https://dbpedia.org/ontology/length
+- source_url: https://dbpedia.org/ontology/sourceElevation

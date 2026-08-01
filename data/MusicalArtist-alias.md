@@ -6,10 +6,10 @@
 
 ## Properties
 
-### birthName
-- propertyName: birthName
+### alias
+- propertyName: alias
 - xsd type: xsd:string
-- description: Full name given to the artist at birth.
-- amharic aliases: የትውልድ_ስም, የተወለደበት_ስም
+- description: Stage name, alternate name, or commonly used alias for the musical artist.
+- amharic aliases: ቅጽል_ስም, የመድረክ_ስም
 - mapping convention: templateProperty to ontologyProperty mapping used by DBpedia mappings wiki.
-- source_url: https://dbpedia.org/ontology/birthName
+- source_url: https://dbpedia.org/ontology/alias

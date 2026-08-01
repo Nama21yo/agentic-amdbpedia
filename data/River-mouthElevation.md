@@ -6,10 +6,10 @@
 
 ## Properties
 
-### length
-- propertyName: length
+### mouthElevation
+- propertyName: mouthElevation
 - xsd type: xsd:double
-- description: Total length of the river.
-- amharic aliases: ርዝመት, የወንዝ_ርዝመት
+- description: Elevation at the river mouth.
+- amharic aliases: የአፍ_ከፍታ, የወንዝ_አፍ_ከፍታ
 - mapping convention: templateProperty to ontologyProperty mapping used by DBpedia mappings wiki.
-- source_url: https://dbpedia.org/ontology/length
+- source_url: https://dbpedia.org/ontology/mouthElevation

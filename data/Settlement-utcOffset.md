@@ -6,10 +6,10 @@
 
 ## Properties
 
-### populationTotal
-- propertyName: populationTotal
-- xsd type: xsd:nonNegativeInteger
-- description: Total population of a settlement.
-- amharic aliases: ጠቅላላ_ህዝብ, የህዝብ_ብዛት
+### utcOffset
+- propertyName: utcOffset
+- xsd type: xsd:string
+- description: UTC time offset used by the settlement.
+- amharic aliases: የሰዓት_ልዩነት, UTC_ልዩነት
 - mapping convention: templateProperty to ontologyProperty mapping used by DBpedia mappings wiki.
-- source_url: https://dbpedia.org/ontology/populationTotal
+- source_url: https://dbpedia.org/ontology/utcOffset

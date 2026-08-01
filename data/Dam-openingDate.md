@@ -6,10 +6,10 @@
 
 ## Properties
 
-### height
-- propertyName: height
-- xsd type: xsd:double
-- description: Structural height of the dam.
-- amharic aliases: ከፍታ, የግድብ_ከፍታ
+### openingDate
+- propertyName: openingDate
+- xsd type: xsd:date
+- description: Date when the dam was opened or commissioned.
+- amharic aliases: የተከፈተበት_ቀን, የመክፈቻ_ቀን
 - mapping convention: templateProperty to ontologyProperty mapping used by DBpedia mappings wiki.
-- source_url: https://dbpedia.org/ontology/height
+- source_url: https://dbpedia.org/ontology/openingDate

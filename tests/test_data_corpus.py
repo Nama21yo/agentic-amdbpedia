@@ -5,10 +5,11 @@ from pathlib import Path
 from typing import Any
 
 from scripts.validate_corpus import (
-    MIN_CLASS_FILES,
+    MIN_CLASSES,
     MIN_PROPERTY_DOCUMENTS,
+    MIN_SOURCE_DOCUMENTS,
     REQUIRED_PROPERTY_FIELDS,
-    class_markdown_files,
+    corpus_markdown_files,
     load_aliases,
     parse_property_documents,
     validate_corpus,
@@ -19,7 +20,7 @@ DATA_DIR = PROJECT_ROOT / "data"
 
 
 def test_minimum_document_count() -> None:
-    assert len(class_markdown_files(DATA_DIR)) >= MIN_CLASS_FILES
+    assert len(corpus_markdown_files(DATA_DIR)) >= MIN_SOURCE_DOCUMENTS
 
 
 def test_minimum_property_count() -> None:
@@ -27,9 +28,19 @@ def test_minimum_property_count() -> None:
     assert len(documents) >= MIN_PROPERTY_DOCUMENTS
 
 
+def test_minimum_class_count() -> None:
+    documents = validate_corpus(DATA_DIR)
+    assert len({document.class_name for document in documents}) >= MIN_CLASSES
+
+
+def test_each_source_file_is_one_indexable_document() -> None:
+    for path in corpus_markdown_files(DATA_DIR):
+        assert len(parse_property_documents(path)) == 1, path
+
+
 def test_property_entries_have_required_fields() -> None:
     documents = [
-        doc for path in class_markdown_files(DATA_DIR) for doc in parse_property_documents(path)
+        doc for path in corpus_markdown_files(DATA_DIR) for doc in parse_property_documents(path)
     ]
     assert documents
     for document in documents:

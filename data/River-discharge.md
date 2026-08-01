@@ -6,10 +6,10 @@
 
 ## Properties
 
-### length
-- propertyName: length
+### discharge
+- propertyName: discharge
 - xsd type: xsd:double
-- description: Total length of the river.
-- amharic aliases: ርዝመት, የወንዝ_ርዝመት
+- description: Average water discharge of the river.
+- amharic aliases: ፍሳሽ, የወንዝ_ፍሳሽ
 - mapping convention: templateProperty to ontologyProperty mapping used by DBpedia mappings wiki.
-- source_url: https://dbpedia.org/ontology/length
+- source_url: https://dbpedia.org/ontology/discharge

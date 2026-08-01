@@ -6,10 +6,10 @@
 
 ## Properties
 
-### numberOfStudents
-- propertyName: numberOfStudents
-- xsd type: xsd:nonNegativeInteger
-- description: Total number of enrolled students.
-- amharic aliases: የተማሪዎች_ብዛት, ጠቅላላ_ተማሪዎች
+### endowment
+- propertyName: endowment
+- xsd type: xsd:double
+- description: Financial endowment value associated with the university.
+- amharic aliases: የገንዘብ_ተቋም, ኢንዶውመንት
 - mapping convention: templateProperty to ontologyProperty mapping used by DBpedia mappings wiki.
-- source_url: https://dbpedia.org/ontology/numberOfStudents
+- source_url: https://dbpedia.org/ontology/endowment

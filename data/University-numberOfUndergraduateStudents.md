@@ -6,10 +6,10 @@
 
 ## Properties
 
-### numberOfStudents
-- propertyName: numberOfStudents
+### numberOfUndergraduateStudents
+- propertyName: numberOfUndergraduateStudents
 - xsd type: xsd:nonNegativeInteger
-- description: Total number of enrolled students.
-- amharic aliases: የተማሪዎች_ብዛት, ጠቅላላ_ተማሪዎች
+- description: Number of undergraduate students.
+- amharic aliases: የመጀመሪያ_ዲግሪ_ተማሪዎች, አንደኛ_ዲግሪ_ተማሪዎች
 - mapping convention: templateProperty to ontologyProperty mapping used by DBpedia mappings wiki.
-- source_url: https://dbpedia.org/ontology/numberOfStudents
+- source_url: https://dbpedia.org/ontology/numberOfUndergraduateStudents

@@ -6,10 +6,10 @@
 
 ## Properties
 
-### elevation
-- propertyName: elevation
-- xsd type: xsd:double
-- description: Height of the mountain summit above sea level.
-- amharic aliases: ከፍታ, የተራራ_ከፍታ
+### firstAscentYear
+- propertyName: firstAscentYear
+- xsd type: xsd:gYear
+- description: Year of the first recorded ascent.
+- amharic aliases: የመጀመሪያ_መውጣት_ዓመት, መጀመሪያ_መውጣት
 - mapping convention: templateProperty to ontologyProperty mapping used by DBpedia mappings wiki.
-- source_url: https://dbpedia.org/ontology/elevation
+- source_url: https://dbpedia.org/ontology/firstAscentYear

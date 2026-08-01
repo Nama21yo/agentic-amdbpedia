@@ -6,10 +6,10 @@
 
 ## Properties
 
-### elevation
-- propertyName: elevation
+### prominence
+- propertyName: prominence
 - xsd type: xsd:double
-- description: Height of the mountain summit above sea level.
-- amharic aliases: ከፍታ, የተራራ_ከፍታ
+- description: Topographic prominence of the mountain.
+- amharic aliases: ቁልቁለት_ከፍታ, የተራራ_ግርማ
 - mapping convention: templateProperty to ontologyProperty mapping used by DBpedia mappings wiki.
-- source_url: https://dbpedia.org/ontology/elevation
+- source_url: https://dbpedia.org/ontology/prominence

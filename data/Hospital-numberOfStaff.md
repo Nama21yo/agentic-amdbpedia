@@ -6,10 +6,10 @@
 
 ## Properties
 
-### bedCount
-- propertyName: bedCount
+### numberOfStaff
+- propertyName: numberOfStaff
 - xsd type: xsd:nonNegativeInteger
-- description: Number of hospital beds available in the institution.
-- amharic aliases: የአልጋ_ብዛት, የሆስፒታል_አልጋዎች
+- description: Total number of staff members associated with the hospital.
+- amharic aliases: የሰራተኞች_ብዛት, የሆስፒታል_ሰራተኞች
 - mapping convention: templateProperty to ontologyProperty mapping used by DBpedia mappings wiki.
-- source_url: https://dbpedia.org/ontology/bedCount
+- source_url: https://dbpedia.org/ontology/numberOfStaff

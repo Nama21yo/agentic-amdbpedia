@@ -6,10 +6,10 @@
 
 ## Properties
 
-### height
-- propertyName: height
-- xsd type: xsd:double
-- description: Structural height of the dam.
-- amharic aliases: ከፍታ, የግድብ_ከፍታ
+### status
+- propertyName: status
+- xsd type: xsd:string
+- description: Operational or construction status of the dam.
+- amharic aliases: ሁኔታ, የግድብ_ሁኔታ
 - mapping convention: templateProperty to ontologyProperty mapping used by DBpedia mappings wiki.
-- source_url: https://dbpedia.org/ontology/height
+- source_url: https://dbpedia.org/ontology/status

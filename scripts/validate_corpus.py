@@ -17,7 +17,8 @@ REQUIRED_PROPERTY_FIELDS = (
     "mapping convention",
     "source_url",
 )
-MIN_CLASS_FILES = 9
+MIN_SOURCE_DOCUMENTS = 20
+MIN_CLASSES = 9
 MIN_PROPERTY_DOCUMENTS = 35
 
 
@@ -36,12 +37,12 @@ class CorpusValidationError(ValueError):
     """Raised when a corpus document violates the milestone format."""
 
 
-def class_markdown_files(corpus_dir: Path) -> list[Path]:
+def corpus_markdown_files(corpus_dir: Path) -> list[Path]:
     return sorted(path for path in corpus_dir.glob("*.md") if path.is_file())
 
 
 def parse_property_documents(path: Path) -> list[PropertyDocument]:
-    class_name = path.stem
+    class_name = ""
     entries: list[PropertyDocument] = []
     current_heading: str | None = None
     current_line = 0
@@ -49,6 +50,10 @@ def parse_property_documents(path: Path) -> list[PropertyDocument]:
 
     for line_number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         line = raw_line.strip()
+        if current_heading is None and line.startswith("- class:"):
+            class_name = line.split(":", 1)[1].strip()
+            continue
+
         if line.startswith("### "):
             if current_heading is not None:
                 entries.append(
@@ -85,6 +90,12 @@ def load_aliases(path: Path) -> list[dict[str, object]]:
 
 def validate_property_documents(documents: Iterable[PropertyDocument]) -> None:
     for document in documents:
+        if not document.class_name:
+            raise CorpusValidationError(
+                f"{document.path}:{document.line_number}: property "
+                f"{document.heading!r} missing required class metadata"
+            )
+
         for field in REQUIRED_PROPERTY_FIELDS:
             value = document.fields.get(field)
             if not value:
@@ -137,10 +148,10 @@ def validate_aliases(
 
 
 def validate_corpus(corpus_dir: Path) -> list[PropertyDocument]:
-    markdown_files = class_markdown_files(corpus_dir)
-    if len(markdown_files) < MIN_CLASS_FILES:
+    markdown_files = corpus_markdown_files(corpus_dir)
+    if len(markdown_files) < MIN_SOURCE_DOCUMENTS:
         raise CorpusValidationError(
-            f"{corpus_dir}:1: expected at least {MIN_CLASS_FILES} class markdown files, "
+            f"{corpus_dir}:1: expected at least {MIN_SOURCE_DOCUMENTS} source documents, "
             f"found {len(markdown_files)}"
         )
 
@@ -149,6 +160,13 @@ def validate_corpus(corpus_dir: Path) -> list[PropertyDocument]:
         raise CorpusValidationError(
             f"{corpus_dir}:1: expected at least {MIN_PROPERTY_DOCUMENTS} property documents, "
             f"found {len(documents)}"
+        )
+
+    class_names = {document.class_name for document in documents if document.class_name}
+    if len(class_names) < MIN_CLASSES:
+        raise CorpusValidationError(
+            f"{corpus_dir}:1: expected at least {MIN_CLASSES} ontology classes, "
+            f"found {len(class_names)}"
         )
 
     validate_property_documents(documents)
@@ -170,8 +188,12 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
         return 1
 
-    class_count = len(class_markdown_files(args.corpus_dir))
-    print(f"Validated {class_count} classes and {len(documents)} properties")
+    source_count = len(corpus_markdown_files(args.corpus_dir))
+    class_count = len({document.class_name for document in documents})
+    print(
+        f"Validated {source_count} source documents across "
+        f"{class_count} classes and {len(documents)} properties"
+    )
     return 0
 
 

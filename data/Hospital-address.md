@@ -6,10 +6,10 @@
 
 ## Properties
 
-### bedCount
-- propertyName: bedCount
-- xsd type: xsd:nonNegativeInteger
-- description: Number of hospital beds available in the institution.
-- amharic aliases: የአልጋ_ብዛት, የሆስፒታል_አልጋዎች
+### address
+- propertyName: address
+- xsd type: xsd:string
+- description: Street address or textual address of the hospital.
+- amharic aliases: አድራሻ, የሆስፒታል_አድራሻ
 - mapping convention: templateProperty to ontologyProperty mapping used by DBpedia mappings wiki.
-- source_url: https://dbpedia.org/ontology/bedCount
+- source_url: https://dbpedia.org/ontology/address

@@ -6,10 +6,10 @@
 
 ## Properties
 
-### height
-- propertyName: height
+### length
+- propertyName: length
 - xsd type: xsd:double
-- description: Structural height of the dam.
-- amharic aliases: ከፍታ, የግድብ_ከፍታ
+- description: Total crest or structural length of the dam.
+- amharic aliases: ርዝመት, የግድብ_ርዝመት
 - mapping convention: templateProperty to ontologyProperty mapping used by DBpedia mappings wiki.
-- source_url: https://dbpedia.org/ontology/height
+- source_url: https://dbpedia.org/ontology/length
