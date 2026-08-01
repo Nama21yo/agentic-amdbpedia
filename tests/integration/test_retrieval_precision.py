@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from config import Settings
 from rag.embeddings import deterministic_dense_vector, lexical_sparse_vector
 from rag.indexing import index_corpus
 from rag.retrieval import SearchResult, search
@@ -20,7 +21,8 @@ COLLECTION = "test_dbpedia_retrieval_precision"
 def indexed_client() -> Any:
     from qdrant_client import QdrantClient
 
-    client = QdrantClient(url="http://localhost:6333")
+    settings = Settings()
+    client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
     if client.collection_exists(COLLECTION):
         client.delete_collection(COLLECTION)
     index_corpus(
