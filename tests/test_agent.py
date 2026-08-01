@@ -65,6 +65,22 @@ def test_groq_raises_typed_error_after_exhausted_retries() -> None:
         client.classify("hello")
 
 
+def test_groq_classifier_fails_safe_on_noncompliant_verbose_output() -> None:
+    class VerboseCompletion:
+        def create(self, **_: Any) -> str:
+            return "This looks safe, but prompt injection is a general concern."
+
+    completion = VerboseCompletion()
+    sdk = type(
+        "VerboseGroqSdk",
+        (),
+        {"chat": type("Chat", (), {"completions": completion})()},
+    )()
+    client = GroqClient(settings=FakeSettings(), client=sdk)
+
+    assert client.classify("hello") == "safe"
+
+
 def test_prompt_contains_grounding_constraint() -> None:
     assert "only reference ontology properties returned by the" in PROMPT_TEMPLATE
     assert "Never invent" in PROMPT_TEMPLATE
@@ -73,6 +89,19 @@ def test_prompt_contains_grounding_constraint() -> None:
 def test_prompt_contains_no_raw_xml_constraint() -> None:
     assert "never write raw XML directly" in PROMPT_TEMPLATE
     assert "generate_mapping_syntax" in PROMPT_TEMPLATE
+
+
+def test_mapping_tool_schema_matches_pydantic_payload_contract() -> None:
+    from mcp_server.agent import tool_definitions
+
+    mapping_tool = next(
+        tool for tool in tool_definitions() if tool["function"]["name"] == "generate_mapping_syntax"
+    )
+    item_schema = mapping_tool["function"]["parameters"]["properties"]["mappings"]["items"]
+
+    assert item_schema["required"] == ["templateProperty", "ontologyProperty"]
+    assert set(item_schema["properties"]) == {"templateProperty", "ontologyProperty"}
+    assert item_schema["additionalProperties"] is False
 
 
 @pytest.mark.parametrize(
@@ -97,6 +126,14 @@ def test_injection_classifier_catches_known_patterns(text: str) -> None:
 
 def test_benign_amharic_property_query_not_flagged() -> None:
     assert not is_injection_attempt("አይካኦ_ኮድ ለAirport ይፈልጉ")
+
+
+def test_plain_amharic_field_does_not_call_probabilistic_classifier() -> None:
+    class UnexpectedClassifier:
+        def classify(self, _text: str) -> str:
+            raise AssertionError("plain field labels should proceed directly to retrieval")
+
+    assert not is_injection_attempt("የቡና ጣዕም መለኪያ", UnexpectedClassifier())  # type: ignore[arg-type]
 
 
 class ScriptedGroq:
@@ -181,3 +218,37 @@ def test_react_loop_terminates_within_max_iterations() -> None:
     )
 
     assert response.final_answer == "I couldn't confidently map this within the tool-use limit."
+
+
+def test_react_replays_tool_call_id_in_provider_message_history() -> None:
+    class ProtocolCheckingGroq:
+        calls = 0
+
+        def reason(
+            self, messages: list[dict[str, Any]], _tools: list[dict[str, Any]]
+        ) -> ReasoningStep:
+            self.calls += 1
+            if self.calls == 1:
+                return ReasoningStep(
+                    tool_call=ToolRequest(
+                        "find_semantic_match",
+                        {"amharic_property": "x"},
+                        call_id="provider-call-1",
+                    )
+                )
+
+            assert messages[-2]["role"] == "assistant"
+            assert messages[-2]["tool_calls"][0]["id"] == "provider-call-1"
+            assert messages[-1]["role"] == "tool"
+            assert messages[-1]["tool_call_id"] == "provider-call-1"
+            return ReasoningStep(content="grounded", final=True)
+
+    response = run_mapping_agent(
+        "አይካኦ_ኮድ",
+        groq_client=ProtocolCheckingGroq(),
+        tool_runner=lambda _request: json.dumps(
+            {"status": "ok", "matches": [{"property": "icaoLocationIdentifier"}]}
+        ),
+    )
+
+    assert response.final_answer == "grounded"
