@@ -80,6 +80,7 @@ class RetrievalCircuitBreaker:
 
 
 DEFAULT_CIRCUIT_BREAKER = RetrievalCircuitBreaker()
+RRF_SINGLE_CHANNEL_TOP_SCORE = 0.5
 
 
 def encode_query(
@@ -115,6 +116,33 @@ def _class_filter(target_class: str | None) -> Any | None:
 def _payload_string(payload: dict[str, Any], key: str) -> str:
     value = payload.get(key)
     return value if isinstance(value, str) else ""
+
+
+def _normalized_alias(value: str) -> str:
+    terms = value.casefold().replace("_", " ").split()
+    return " ".join(term[1:] if term.startswith("የ") and len(term) > 1 else term for term in terms)
+
+
+def _has_curated_alias_evidence(query: str, payload: dict[str, Any]) -> bool:
+    """Require direct corpus evidence for an ambiguous single-channel RRF hit."""
+
+    normalized_query = _normalized_alias(query)
+    aliases: list[str] = []
+    for key in ("amharic_aliases", "english_aliases"):
+        values = payload.get(key, [])
+        if isinstance(values, list):
+            aliases.extend(value for value in values if isinstance(value, str))
+
+    property_name = payload.get("property")
+    if isinstance(property_name, str):
+        aliases.append(property_name)
+
+    return any(
+        normalized_alias
+        and (normalized_alias in normalized_query or normalized_query in normalized_alias)
+        for alias in aliases
+        if (normalized_alias := _normalized_alias(alias))
+    )
 
 
 @dataclass(frozen=True)
@@ -228,7 +256,14 @@ def search(
     if circuit_breaker is not None:
         circuit_breaker.record_success()
     scored_points = response.points
-    if not scored_points or float(scored_points[0].score) < threshold:
+    top_payload = scored_points[0].payload if scored_points else None
+    top_score = float(scored_points[0].score) if scored_points else 0.0
+    ambiguous_without_alias = (
+        top_score <= RRF_SINGLE_CHANNEL_TOP_SCORE
+        and isinstance(top_payload, dict)
+        and not _has_curated_alias_evidence(query, top_payload)
+    )
+    if not scored_points or top_score < threshold or ambiguous_without_alias:
         log_event(LOGGER, "retrieval.no_match", threshold=threshold)
         return [NoMatchFound(query=query)]
 

@@ -117,3 +117,66 @@ def test_search_low_score_returns_no_match() -> None:
     )
 
     assert results == [NoMatchFound(query="nonsense")]
+
+
+def test_search_single_channel_rrf_without_alias_evidence_returns_no_match() -> None:
+    class AmbiguousClient(FakeClient):
+        def query_points(self, **kwargs: Any) -> FakeQueryResponse:
+            self.prefetch = kwargs["prefetch"]
+            self.query = kwargs["query"]
+            return FakeQueryResponse(
+                [
+                    FakeScoredPoint(
+                        0.5,
+                        {
+                            "class": "Airport",
+                            "property": "elevation",
+                            "amharic_aliases": ["ከፍታ"],
+                            "english_aliases": ["airport elevation"],
+                        },
+                    )
+                ]
+            )
+
+    results = search(
+        "የቡና ጣዕም መለኪያ",
+        target_class="Airport",
+        client=AmbiguousClient(),
+        dense_embedder=lambda text: deterministic_dense_vector(text, size=16),
+        sparse_embedder=lexical_sparse_vector,
+        confidence_threshold=0.35,
+    )
+
+    assert results == [NoMatchFound(query="የቡና ጣዕም መለኪያ")]
+
+
+def test_search_single_channel_rrf_with_curated_alias_is_accepted() -> None:
+    class AliasMatchClient(FakeClient):
+        def query_points(self, **kwargs: Any) -> FakeQueryResponse:
+            self.prefetch = kwargs["prefetch"]
+            self.query = kwargs["query"]
+            return FakeQueryResponse(
+                [
+                    FakeScoredPoint(
+                        0.5,
+                        {
+                            "class": "Dam",
+                            "property": "openingDate",
+                            "amharic_aliases": ["የመክፈቻ_ቀን"],
+                            "english_aliases": ["opening date"],
+                        },
+                    )
+                ]
+            )
+
+    results = search(
+        "የግድብ_መክፈቻ_ቀን",
+        target_class="Dam",
+        client=AliasMatchClient(),
+        dense_embedder=lambda text: deterministic_dense_vector(text, size=16),
+        sparse_embedder=lexical_sparse_vector,
+        confidence_threshold=0.35,
+    )
+
+    assert isinstance(results[0], SearchResult)
+    assert results[0].property == "openingDate"
