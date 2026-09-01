@@ -1,5 +1,6 @@
 # Changelog
 
+- `feat(ontology): port DbpediaOntologyCatalog and AmharicMappingIndex from agentic-dbpedia, seed cached wiki exports (refs 10.1)`
 - `feat(rag): switch local dense embeddings to multilingual e5 small`
 - `fix(mcp): generate Claude Desktop config with explicit uv project`
 - `fix(indexing): support direct script execution and bge-m3 dense loading`
