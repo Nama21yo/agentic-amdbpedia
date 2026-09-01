@@ -7,6 +7,7 @@ requires-python = ">=3.11"
 dependencies = [
     "fastembed>=0.7.0",
     "groq>=0.31.0",
+    "litellm==1.98.0",
     "mcp[cli]>=1.10.0",
     "pydantic>=2.11.0",
     "pydantic-settings>=2.10.0",
