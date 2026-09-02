@@ -3,18 +3,32 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 
 def build_desktop_config(project_root: Path | None = None) -> dict[str, object]:
     root = project_root or Path(__file__).resolve().parents[1]
     server_path = root / "mcp_server" / "server.py"
+    uv_command = shutil.which("uv") or "uv"
     return {
         "mcpServers": {
             "dbpedia_mapper": {
-                "command": "uv",
-                "args": ["run", "--project", str(root), "python", str(server_path)],
-                "env": {"GROQ_API_KEY": "your_groq_api_key_here"},
+                "command": uv_command,
+                "args": [
+                    "run",
+                    "--frozen",
+                    "--no-dev",
+                    "--python",
+                    "3.11",
+                    "--directory",
+                    str(root),
+                    "--project",
+                    str(root),
+                    "python",
+                    str(server_path),
+                ],
+                "env": {},
             }
         }
     }
