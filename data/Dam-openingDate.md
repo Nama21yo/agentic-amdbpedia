@@ -10,6 +10,6 @@
 - propertyName: openingDate
 - xsd type: xsd:date
 - description: Date when the dam was opened or commissioned.
-- amharic aliases: የተከፈተበት_ቀን, የመክፈቻ_ቀን
+- amharic aliases: የተከፈተበት_ቀን, የመክፈቻ_ቀን, የግድብ_መክፈቻ_ቀን
 - mapping convention: templateProperty to ontologyProperty mapping used by DBpedia mappings wiki.
 - source_url: https://dbpedia.org/ontology/openingDate
