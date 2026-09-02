@@ -25,3 +25,9 @@ run-server:
 
 validate-corpus:
     uv run --frozen --no-dev --python 3.11 python scripts/validate_corpus.py data
+
+refresh-ontology:
+    uv run --frozen --no-dev --python 3.11 python scripts/refresh_wiki_cache.py --target ontology
+
+refresh-mappings:
+    uv run --frozen --no-dev --python 3.11 python scripts/refresh_wiki_cache.py --target mappings
