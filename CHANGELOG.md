@@ -1,5 +1,6 @@
 # Changelog
 
+- `feat(review): decision endpoint wired to training-log capture (refs 14.2)`
 - `feat(review): Postgres-backed review queue schema and HTTP layer (refs 14.1)`
 - `chore(training): export script matching LLMIntegration's dataset format, verified via datasets.load_dataset (refs 13.2)`
 - `feat(training): append-only training-example log matching LLMIntegration's dspy.Example shape (refs 13.1)`

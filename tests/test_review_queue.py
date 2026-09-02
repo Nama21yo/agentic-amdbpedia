@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import StaticPool
+from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
 from db.session import (
@@ -19,10 +21,23 @@ from db.session import (
     set_review_status,
 )
 from mcp_server.http_app import create_app
+from rag.training_log import read_examples
 
 SAMPLE_MAPPINGS = [
     {"templateProperty": "አይካኦ_ኮድ", "ontologyProperty": "icaoLocationIdentifier", "confidence": 0.9}
 ]
+
+
+def _in_memory_engine() -> AsyncEngine:
+    return create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        poolclass=StaticPool,
+        connect_args={"check_same_thread": False},
+    )
+
+
+def _make_app(*, training_log_path: Path | None = None) -> Starlette:
+    return create_app(engine=_in_memory_engine(), training_log_path=training_log_path)
 
 
 @pytest_asyncio.fixture
@@ -129,12 +144,7 @@ async def test_set_review_status_transitions_and_persists(engine: AsyncEngine) -
 
 
 def test_post_v1_reviews_creates_a_row_and_returns_frontend_shaped_json() -> None:
-    engine = create_async_engine(
-        "sqlite+aiosqlite:///:memory:",
-        poolclass=StaticPool,
-        connect_args={"check_same_thread": False},
-    )
-    app = create_app(engine=engine)
+    app = _make_app()
 
     with TestClient(app) as client:
         response = client.post(
@@ -166,12 +176,7 @@ def test_post_v1_reviews_creates_a_row_and_returns_frontend_shaped_json() -> Non
 
 
 def test_post_v1_reviews_rejects_missing_required_fields() -> None:
-    engine = create_async_engine(
-        "sqlite+aiosqlite:///:memory:",
-        poolclass=StaticPool,
-        connect_args={"check_same_thread": False},
-    )
-    app = create_app(engine=engine)
+    app = _make_app()
 
     with TestClient(app) as client:
         response = client.post("/v1/reviews", json={"run_id": "run-1"})
@@ -181,12 +186,7 @@ def test_post_v1_reviews_rejects_missing_required_fields() -> None:
 
 
 def test_get_v1_reviews_lists_created_items() -> None:
-    engine = create_async_engine(
-        "sqlite+aiosqlite:///:memory:",
-        poolclass=StaticPool,
-        connect_args={"check_same_thread": False},
-    )
-    app = create_app(engine=engine)
+    app = _make_app()
 
     with TestClient(app) as client:
         client.post(
@@ -208,15 +208,143 @@ def test_get_v1_reviews_lists_created_items() -> None:
 
 
 def test_get_v1_reviews_by_id_returns_404_for_missing_review() -> None:
-    engine = create_async_engine(
-        "sqlite+aiosqlite:///:memory:",
-        poolclass=StaticPool,
-        connect_args={"check_same_thread": False},
-    )
-    app = create_app(engine=engine)
+    app = _make_app()
 
     with TestClient(app) as client:
         response = client.get("/v1/reviews/does-not-exist")
+
+        assert response.status_code == 404
+        assert response.json()["error_type"] == "not_found"
+
+
+def test_decide_review_approves_without_a_correction_and_logs_no_correction(
+    tmp_path: Path,
+) -> None:
+    log_path = tmp_path / "training_examples.jsonl"
+    app = _make_app(training_log_path=log_path)
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/v1/reviews",
+            json={
+                "run_id": "run-1",
+                "template_name": "Infobox airport",
+                "domain_class": "Airport",
+                "mappings": SAMPLE_MAPPINGS,
+            },
+        ).json()
+
+        response = client.post(
+            f"/v1/reviews/{created['id']}/decision", json={"decision": "approved"}
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "approved"
+        assert body["mappings"] == SAMPLE_MAPPINGS
+
+    examples = read_examples(log_path)
+    assert len(examples) == 1
+    assert examples[0].was_correction is False
+    assert examples[0].property_class == "icaoLocationIdentifier"
+    assert examples[0].run_id == "run-1"
+
+
+def test_decide_review_with_a_correction_logs_was_correction_true(tmp_path: Path) -> None:
+    """The stated 14.2 acceptance criterion: approving a corrected mapping
+    logs was_correction: true."""
+
+    log_path = tmp_path / "training_examples.jsonl"
+    app = _make_app(training_log_path=log_path)
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/v1/reviews",
+            json={
+                "run_id": "run-1",
+                "template_name": "Infobox airport",
+                "domain_class": "Airport",
+                "mappings": SAMPLE_MAPPINGS,
+            },
+        ).json()
+
+        corrected = [
+            {
+                "templateProperty": "አይካኦ_ኮድ",
+                "ontologyProperty": "iataLocationIdentifier",  # human corrected this
+                "confidence": 0.9,
+            }
+        ]
+        response = client.post(
+            f"/v1/reviews/{created['id']}/decision",
+            json={"decision": "approved", "corrected_mappings": corrected},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "approved"
+        assert body["mappings"] == corrected
+
+    examples = read_examples(log_path)
+    assert len(examples) == 1
+    assert examples[0].was_correction is True
+    assert examples[0].model_predicted == "icaoLocationIdentifier"
+    assert examples[0].property_class == "iataLocationIdentifier"
+
+
+def test_decide_review_rejection_still_logs_a_training_example(tmp_path: Path) -> None:
+    """13.1's design point: every decision becomes training data whether or
+    not it later gets published."""
+
+    log_path = tmp_path / "training_examples.jsonl"
+    app = _make_app(training_log_path=log_path)
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/v1/reviews",
+            json={
+                "run_id": "run-1",
+                "template_name": "Infobox airport",
+                "domain_class": "Airport",
+                "mappings": SAMPLE_MAPPINGS,
+            },
+        ).json()
+
+        response = client.post(
+            f"/v1/reviews/{created['id']}/decision", json={"decision": "rejected"}
+        )
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "rejected"
+
+    assert len(read_examples(log_path)) == 1
+
+
+def test_decide_review_rejects_an_unknown_decision_value(tmp_path: Path) -> None:
+    app = _make_app(training_log_path=tmp_path / "training_examples.jsonl")
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/v1/reviews",
+            json={
+                "run_id": "run-1",
+                "template_name": "A",
+                "domain_class": "Airport",
+                "mappings": SAMPLE_MAPPINGS,
+            },
+        ).json()
+
+        response = client.post(f"/v1/reviews/{created['id']}/decision", json={"decision": "maybe"})
+
+        assert response.status_code == 400
+        assert response.json()["error_type"] == "validation"
+
+
+def test_decide_review_returns_404_for_a_missing_review(tmp_path: Path) -> None:
+    app = _make_app(training_log_path=tmp_path / "training_examples.jsonl")
+
+    with TestClient(app) as client:
+        response = client.post("/v1/reviews/does-not-exist/decision", json={"decision": "approved"})
 
         assert response.status_code == 404
         assert response.json()["error_type"] == "not_found"

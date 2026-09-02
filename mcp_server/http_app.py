@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -34,13 +35,18 @@ from db.session import (
     init_models,
     list_review_items,
     session_factory,
+    set_review_status,
 )
 from errors import AssistantValidationError, ClientSafeError
 from logging_config import correlation_context, get_correlation_id, log_event
+from rag.training_log import DEFAULT_LOG_PATH, log_decision
 
 LOGGER = logging.getLogger("dbpedia_mapping_assistant.http")
 
 REQUIRED_CREATE_FIELDS = ("run_id", "template_name", "domain_class", "mappings")
+# frontend/src/lib/api.ts::decideReview's "approved"/"rejected" ->
+# db.models.REVIEW_STATUSES.
+DECISION_TO_STATUS = {"approved": "approved", "rejected": "rejected"}
 
 
 def _error_response(error: ClientSafeError, status_code: int) -> JSONResponse:
@@ -112,17 +118,101 @@ async def get_review(request: Request) -> JSONResponse:
         return JSONResponse(item.to_api_dict())
 
 
+async def decide_review(request: Request) -> JSONResponse:
+    """Approve or reject a review item, logging one training example per
+    mapping row unconditionally (refs 14.2) — every decision becomes
+    training data whether or not it later gets published (14.3).
+
+    An optional `corrected_mappings` (same shape as `mappings`) lets a
+    reviewer submit an edited answer instead of a bare accept/reject; a
+    mapping row whose `ontologyProperty` differs from what was originally
+    predicted for that `templateProperty` logs `was_correction: true`.
+    """
+
+    with correlation_context():
+        review_id = request.path_params["review_id"]
+        try:
+            body: Any = await request.json()
+        except Exception:
+            return _error_response(AssistantValidationError("Request body must be valid JSON"), 400)
+
+        if not isinstance(body, dict) or "decision" not in body:
+            return _error_response(
+                AssistantValidationError("Missing required field: decision"), 400
+            )
+
+        decision = body["decision"]
+        if decision not in DECISION_TO_STATUS:
+            return _error_response(
+                AssistantValidationError(
+                    f"decision must be one of {sorted(DECISION_TO_STATUS)}, got {decision!r}"
+                ),
+                400,
+            )
+
+        corrected_mappings = body.get("corrected_mappings")
+
+        factory = _session_factory_from_state(request)
+        async with factory() as session:
+            try:
+                item = await get_review_item(session, review_id)
+            except ReviewNotFoundError as exc:
+                return _error_response(exc, 404)
+
+            original_by_template = {
+                mapping["templateProperty"]: mapping["ontologyProperty"]
+                for mapping in item.mappings
+            }
+            confirmed_mappings = (
+                corrected_mappings if corrected_mappings is not None else item.mappings
+            )
+
+            for mapping in confirmed_mappings:
+                template_property = mapping["templateProperty"]
+                human_confirmed = mapping["ontologyProperty"]
+                model_predicted = original_by_template.get(template_property, human_confirmed)
+                # The retriever's full candidate list isn't persisted on a
+                # ReviewItem today, only the chosen prediction -- logging
+                # what was actually decided rather than nothing. Persisting
+                # real retrieval candidates here is a reasonable follow-up
+                # once M16's pipeline orchestration creates review items
+                # with that context available.
+                log_decision(
+                    f"{item.domain_class}'s {template_property}",
+                    [model_predicted],
+                    model_predicted=model_predicted,
+                    human_confirmed=human_confirmed,
+                    run_id=item.run_id,
+                    log_path=request.app.state.training_log_path,
+                )
+
+            updated = await set_review_status(session, review_id, DECISION_TO_STATUS[decision])
+            if corrected_mappings is not None:
+                updated.mappings = corrected_mappings
+                await session.commit()
+                await session.refresh(updated)
+
+        log_event(LOGGER, "http.review_decided", review_id=review_id, decision=decision)
+        return JSONResponse(updated.to_api_dict())
+
+
 routes = [
     Route("/v1/reviews", create_review, methods=["POST"]),
     Route("/v1/reviews", list_reviews, methods=["GET"]),
     Route("/v1/reviews/{review_id}", get_review, methods=["GET"]),
+    Route("/v1/reviews/{review_id}/decision", decide_review, methods=["POST"]),
 ]
 
 
-def create_app(*, engine: AsyncEngine | None = None, settings: Settings | None = None) -> Starlette:
+def create_app(
+    *,
+    engine: AsyncEngine | None = None,
+    settings: Settings | None = None,
+    training_log_path: Path | None = None,
+) -> Starlette:
     """Build the app with a fresh engine/session factory in app.state, so
-    tests can inject an isolated (e.g. in-memory SQLite) engine instead of
-    the real configured database."""
+    tests can inject an isolated (e.g. in-memory SQLite) engine and/or an
+    isolated training-log path instead of the real configured ones."""
 
     resolved_engine = engine or create_engine(settings=settings)
 
@@ -133,6 +223,7 @@ def create_app(*, engine: AsyncEngine | None = None, settings: Settings | None =
 
     app = Starlette(routes=routes, lifespan=lifespan)
     app.state.engine = resolved_engine
+    app.state.training_log_path = training_log_path or DEFAULT_LOG_PATH
     app.state.session_factory = session_factory(resolved_engine)
     return app
 
