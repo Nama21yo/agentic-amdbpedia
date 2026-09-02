@@ -5,6 +5,7 @@ description = "Amharic-to-English DBpedia ontology mapping assistant using hybri
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "dspy>=3.3.1",
     "fastembed>=0.7.0",
     "groq>=0.31.0",
     "litellm==1.98.0",
@@ -12,6 +13,7 @@ dependencies = [
     "pydantic>=2.11.0",
     "pydantic-settings>=2.10.0",
     "python-dotenv>=1.1.0",
+    "rapidfuzz>=3.14.6",
     "sentence-transformers>=6.0.1",
     "torch>=2.2",
 ]
@@ -58,6 +60,8 @@ files = ["config.py", "errors.py", "logging_config.py", "rag", "mcp_server", "sc
 
 [[tool.mypy.overrides]]
 module = [
+    "dspy",
+    "dspy.*",
     "fastembed",
     "fastembed.*",
     "sentence_transformers",
