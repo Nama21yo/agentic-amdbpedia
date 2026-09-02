@@ -156,6 +156,11 @@ async def decide_review(request: Request) -> JSONResponse:
     -refresh hook for real. A failed publish leaves status at "approved"
     (the review decision itself still stands) and reports the failure —
     never a silent partial state.
+
+    An optional `reason` (freeform, e.g. why a mapping was rejected) isn't
+    stored on the row today — there's no column for it yet — but is
+    included on the `http.review_decided` structured log line so it isn't
+    silently dropped.
     """
 
     with correlation_context():
@@ -180,6 +185,7 @@ async def decide_review(request: Request) -> JSONResponse:
             )
 
         corrected_mappings = body.get("corrected_mappings")
+        reason = body.get("reason")
 
         factory = _session_factory_from_state(request)
         async with factory() as session:
@@ -248,7 +254,9 @@ async def decide_review(request: Request) -> JSONResponse:
                 refresh_func()
                 log_event(LOGGER, "http.review_published", review_id=review_id)
 
-        log_event(LOGGER, "http.review_decided", review_id=review_id, decision=decision)
+        log_event(
+            LOGGER, "http.review_decided", review_id=review_id, decision=decision, reason=reason
+        )
         return JSONResponse(updated.to_api_dict())
 
 

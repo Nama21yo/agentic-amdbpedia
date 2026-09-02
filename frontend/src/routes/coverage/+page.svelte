@@ -25,24 +25,28 @@
 </p>
 
 {#if error}
-	<p class="rounded border border-amber-800 bg-amber-950/40 px-4 py-3 text-sm text-amber-300">
+	<p class="rounded-lg border border-amber-800 bg-amber-950/40 px-4 py-3 text-sm text-amber-300">
 		{error}
 	</p>
 {:else if !stats}
-	<p class="text-neutral-400">Loading…</p>
+	<div class="grid grid-cols-3 gap-4">
+		<div class="h-20 animate-pulse rounded-xl border border-neutral-800 bg-neutral-900/40"></div>
+		<div class="h-20 animate-pulse rounded-xl border border-neutral-800 bg-neutral-900/40"></div>
+		<div class="h-20 animate-pulse rounded-xl border border-neutral-800 bg-neutral-900/40"></div>
+	</div>
 {:else}
 	<dl class="grid grid-cols-3 gap-4">
-		<div class="rounded border border-neutral-800 p-4">
+		<div class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4">
 			<dt class="text-sm text-neutral-400">Templates</dt>
-			<dd class="text-2xl font-semibold">{stats.totalTemplates}</dd>
+			<dd class="text-2xl font-semibold tabular-nums">{stats.totalTemplates}</dd>
 		</div>
-		<div class="rounded border border-neutral-800 p-4">
+		<div class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4">
 			<dt class="text-sm text-neutral-400">Mapped</dt>
-			<dd class="text-2xl font-semibold">{stats.mappedTemplates}</dd>
+			<dd class="text-2xl font-semibold tabular-nums">{stats.mappedTemplates}</dd>
 		</div>
-		<div class="rounded border border-neutral-800 p-4">
+		<div class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4">
 			<dt class="text-sm text-neutral-400">Coverage</dt>
-			<dd class="text-2xl font-semibold">{stats.coveragePercent.toFixed(1)}%</dd>
+			<dd class="text-2xl font-semibold tabular-nums">{stats.coveragePercent.toFixed(1)}%</dd>
 		</div>
 	</dl>
 {/if}

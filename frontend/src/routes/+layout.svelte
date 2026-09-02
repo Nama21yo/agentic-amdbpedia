@@ -3,6 +3,7 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
+	import Toaster from '$lib/components/Toaster.svelte';
 
 	let { children } = $props();
 
@@ -15,16 +16,21 @@
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 
+<Toaster />
+
 <div class="min-h-screen bg-neutral-950 text-neutral-100">
-	<header class="border-b border-neutral-800">
-		<nav class="mx-auto flex max-w-5xl items-center gap-6 px-6 py-4">
-			<span class="font-semibold tracking-tight">agentic-amdbpedia</span>
+	<header class="border-b border-neutral-800 bg-neutral-950/80 backdrop-blur">
+		<nav class="mx-auto flex max-w-5xl items-center gap-1 px-6 py-4">
+			<span class="mr-6 font-semibold tracking-tight">agentic-amdbpedia</span>
 			{#each links as link (link.href)}
+				{@const active = page.url.pathname === link.href}
 				<a
 					href={link.href}
 					class={[
-						'text-sm hover:text-neutral-100',
-						page.url.pathname === link.href ? 'text-neutral-100' : 'text-neutral-400'
+						'rounded-lg px-3 py-1.5 text-sm transition-colors',
+						active
+							? 'bg-neutral-900 text-neutral-100'
+							: 'text-neutral-400 hover:bg-neutral-900/60 hover:text-neutral-100'
 					]}
 				>
 					{link.label}

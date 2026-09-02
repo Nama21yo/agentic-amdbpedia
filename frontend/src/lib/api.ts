@@ -15,6 +15,27 @@ import type {
 
 export class BackendUnavailableError extends Error {}
 
+/**
+ * The backend understood the request but the decision itself failed
+ * server-side — most importantly a publish failure (missing MediaWiki
+ * credentials, a rejected edit, ...): `mcp_server/http_app.py::decide_review`
+ * returns 502 with `{error_type, message, review}`, where `review` is the
+ * item's real resulting state (still "approved", never silently
+ * "published"). Callers should apply `review` to their local state rather
+ * than treating this like `BackendUnavailableError` — the decision itself
+ * (approve/reject) went through even when a requested publish didn't.
+ */
+export class DecisionFailedError extends Error {
+	errorType: string;
+	review?: ReviewItem;
+
+	constructor(message: string, errorType: string, review?: ReviewItem) {
+		super(message);
+		this.errorType = errorType;
+		this.review = review;
+	}
+}
+
 async function safeFetch(input: string, init?: RequestInit): Promise<Response> {
 	try {
 		return await fetch(input, init);
@@ -108,7 +129,9 @@ export async function listReviewQueue(): Promise<ReviewItem[]> {
  * write the mapping to the live MediaWiki — a real, outward-facing,
  * hard-to-reverse action — and flips status to "published" on success
  * instead of "approved"; leave it `false`/omitted to just record the
- * review decision without publishing anything live.
+ * review decision without publishing anything live. A failed publish
+ * rejects with `DecisionFailedError`, not `BackendUnavailableError` — see
+ * that class's doc comment.
  */
 export async function decideReview(
 	id: string,
@@ -125,7 +148,13 @@ export async function decideReview(
 			publish: options?.publish
 		})
 	});
-	if (!res.ok) throw new BackendUnavailableError(`decision failed: ${res.status}`);
+	if (!res.ok) {
+		const body = await res.json().catch(() => null);
+		if (body && typeof body.message === 'string') {
+			throw new DecisionFailedError(body.message, body.error_type ?? 'unknown', body.review);
+		}
+		throw new BackendUnavailableError(`decision failed: ${res.status}`);
+	}
 	return res.json();
 }
 
