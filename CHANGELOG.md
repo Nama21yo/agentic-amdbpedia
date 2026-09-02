@@ -1,5 +1,6 @@
 # Changelog
 
+- `feat(http): SSE preview endpoint + find-semantic-match, frontend PLANNED → EXISTING (refs 16.3)`
 - `feat(pipeline): LangGraph orchestration — extract → predict → format → persist (refs 16.2)`
 - `feat(pipeline): infobox extraction node, ported from agentic-dbpedia's DumpTemplateParser (refs 16.1)`
 - `feat(qa): load DEF output into Tentris and verify via SPARQL (refs 15.1)`

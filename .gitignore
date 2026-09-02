@@ -11,3 +11,4 @@ __pycache__/
 .serena/
 data/training_examples.jsonl
 data/training_exports/
+data/review_queue.db

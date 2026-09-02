@@ -1,10 +1,9 @@
 // Typed client for the two backends this frontend calls. Every endpoint here
-// is documented with its contract; several are PLANNED, not yet implemented
-// on the backend (agentic-dbpedia's review queue and cross-lingual's HTTP
-// layer are both still MCP/CLI-only as of this starter). Each function fails
-// closed with BackendUnavailableError rather than throwing an opaque network
-// error, so callers can render an honest "not connected yet" state instead
-// of a crash.
+// is documented with its contract; each function is labeled PLANNED or
+// EXISTING in its own doc comment. Each function fails closed with
+// BackendUnavailableError rather than throwing an opaque network error, so
+// callers can render an honest "not connected yet" state instead of a
+// crash.
 import { AGENTIC_DBPEDIA_URL, CROSS_LINGUAL_URL } from './config';
 import type {
 	AgentStep,
@@ -27,17 +26,23 @@ async function safeFetch(input: string, init?: RequestInit): Promise<Response> {
 type PreviewEvent = AgentStep | { node: 'result'; mappings: PredictedMapping[] };
 
 /**
- * Streams the mapping-agent's preview run for a pasted infobox.
+ * EXISTING: POST {CROSS_LINGUAL_URL}/v1/preview — text/event-stream
+ * (mcp_server/http_app.py, refs implementation.md 16.3). Streams the
+ * mapping pipeline's (16.2) progress for a pasted infobox. Each SSE
+ * `data:` line is one JSON-encoded step; the final event carries
+ * `node: "result"` with the predicted mappings. `targetClass` defaults to
+ * `"Thing"` server-side when omitted.
  *
- * PLANNED: POST {AGENTIC_DBPEDIA_URL}/api/v2/agent/preview — text/event-stream.
- * Each SSE `data:` line is one JSON-encoded step; the final event carries
- * `node: "result"` with the predicted mappings.
+ * Was originally pointed at agentic-dbpedia (`AGENTIC_DBPEDIA_URL`) — that
+ * predates this session settling on cross-lingual owning the full
+ * pipeline (agentic-dbpedia is DEF-extraction-only); repointed here for
+ * the same reason 14.1 already repointed `listReviewQueue`/`decideReview`.
  */
 export async function* previewMapping(
 	infobox: string,
 	targetClass?: string
 ): AsyncGenerator<PreviewEvent> {
-	const res = await safeFetch(`${AGENTIC_DBPEDIA_URL}/api/v2/agent/preview`, {
+	const res = await safeFetch(`${CROSS_LINGUAL_URL}/v1/preview`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ infobox, target_class: targetClass })
@@ -63,9 +68,8 @@ export async function* previewMapping(
 }
 
 /**
- * Asks cross-lingual's verifier/assistant for candidate ontology properties.
- *
- * PLANNED: POST {CROSS_LINGUAL_URL}/v1/find-semantic-match — the same
+ * EXISTING: POST {CROSS_LINGUAL_URL}/v1/find-semantic-match
+ * (mcp_server/http_app.py, refs implementation.md 16.3) — the same
  * find_semantic_match tool already exposed over MCP, mirrored over HTTP so
  * this frontend (and agentic-dbpedia's pipeline) can call it directly.
  */

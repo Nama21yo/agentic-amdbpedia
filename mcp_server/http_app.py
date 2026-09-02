@@ -1,4 +1,5 @@
-"""HTTP layer for the review queue (refs implementation.md 14.1/14.2).
+"""HTTP layer for the review queue and mapping pipeline (refs
+implementation.md 14.1/14.2/16.3).
 
 A separate Starlette ASGI app from `mcp_server/server.py`'s stdio-based
 FastMCP tool interface — this is the general HTTP surface
@@ -7,11 +8,15 @@ Run it with `uvicorn mcp_server.http_app:app`.
 
 Every response the frontend reads matches `frontend/src/lib/types.ts`'s
 shapes field-for-field (camelCase) via `ReviewItem.to_api_dict()` — not
-just "close enough".
+just "close enough". `POST /v1/preview`'s SSE events match
+`frontend/src/lib/api.ts::previewMapping`'s `PreviewEvent` type the same
+way (refs 16.3) — this is where every `PLANNED` label in that file's own
+doc comments becomes `EXISTING`.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
@@ -21,7 +26,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
 from config import Settings
@@ -40,7 +45,10 @@ from db.session import (
 from errors import AssistantValidationError, ClientSafeError
 from logging_config import correlation_context, get_correlation_id, log_event
 from mcp_server.consent import ConsentRequiredError, require_consent
+from mcp_server.pipeline import stream_mapping_pipeline
 from mcp_server.publish import PublishError, publish_mapping
+from mcp_server.server import find_semantic_match_impl
+from rag.retrieval import search as default_search
 from rag.training_log import DEFAULT_LOG_PATH, log_decision
 from scripts.refresh_wiki_cache import refresh_mappings
 
@@ -50,9 +58,14 @@ REQUIRED_CREATE_FIELDS = ("run_id", "template_name", "domain_class", "mappings")
 # frontend/src/lib/api.ts::decideReview's "approved"/"rejected" ->
 # db.models.REVIEW_STATUSES.
 DECISION_TO_STATUS = {"approved": "approved", "rejected": "rejected"}
+# generate_mapping_syntax_impl/MappingPayload.domain_class requires
+# ^[A-Z][A-Za-z0-9]*$ -- owl:Thing is the natural default when a preview
+# request doesn't name a specific class.
+DEFAULT_PREVIEW_DOMAIN_CLASS = "Thing"
 
 PublishFunc = Callable[..., str]
 RefreshMappingsFunc = Callable[..., int]
+SearchFunc = Callable[..., Any]
 
 
 def _error_response(error: ClientSafeError, status_code: int) -> JSONResponse:
@@ -239,11 +252,71 @@ async def decide_review(request: Request) -> JSONResponse:
         return JSONResponse(updated.to_api_dict())
 
 
+async def preview_mapping(request: Request) -> Response:
+    """SSE stream of the mapping pipeline's progress (refs 16.3), matching
+    `frontend/src/lib/api.ts::previewMapping`'s contract exactly: `POST
+    {infobox, target_class?}`, response `text/event-stream` with one JSON
+    -encoded `data:` line per pipeline node (16.2's `stream_mapping_pipeline`)
+    and a final `{"node": "result", "mappings": [...]}` event.
+    """
+
+    with correlation_context():
+        try:
+            body: Any = await request.json()
+        except Exception:
+            return _error_response(AssistantValidationError("Request body must be valid JSON"), 400)
+
+        infobox = body.get("infobox") if isinstance(body, dict) else None
+        if not infobox:
+            return _error_response(AssistantValidationError("Missing required field: infobox"), 400)
+
+        domain_class = body.get("target_class") or DEFAULT_PREVIEW_DOMAIN_CLASS
+        factory = _session_factory_from_state(request)
+
+        async def event_stream() -> AsyncIterator[bytes]:
+            async with factory() as session:
+                async for event in stream_mapping_pipeline(
+                    infobox, domain_class=domain_class, session=session
+                ):
+                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n".encode()
+
+        log_event(LOGGER, "http.preview_started", domain_class=domain_class)
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+async def find_semantic_match(request: Request) -> Response:
+    """Mirrors the `find_semantic_match` MCP tool over HTTP (refs 16.3),
+    matching `frontend/src/lib/api.ts::findSemanticMatch`'s contract
+    exactly: `POST {amharic_property, target_class?}` ->
+    `find_semantic_match_impl`'s own JSON string, passed through unchanged
+    rather than re-encoded (it's already the exact response shape)."""
+
+    with correlation_context():
+        try:
+            body: Any = await request.json()
+        except Exception:
+            return _error_response(AssistantValidationError("Request body must be valid JSON"), 400)
+
+        amharic_property = body.get("amharic_property") if isinstance(body, dict) else None
+        if not amharic_property:
+            return _error_response(
+                AssistantValidationError("Missing required field: amharic_property"), 400
+            )
+
+        search_func: SearchFunc = request.app.state.search_func
+        payload = find_semantic_match_impl(
+            amharic_property, body.get("target_class"), search_func=search_func
+        )
+        return Response(payload, media_type="application/json")
+
+
 routes = [
     Route("/v1/reviews", create_review, methods=["POST"]),
     Route("/v1/reviews", list_reviews, methods=["GET"]),
     Route("/v1/reviews/{review_id}", get_review, methods=["GET"]),
     Route("/v1/reviews/{review_id}/decision", decide_review, methods=["POST"]),
+    Route("/v1/preview", preview_mapping, methods=["POST"]),
+    Route("/v1/find-semantic-match", find_semantic_match, methods=["POST"]),
 ]
 
 
@@ -254,6 +327,7 @@ def create_app(
     training_log_path: Path | None = None,
     publish_func: PublishFunc = publish_mapping,
     refresh_mappings_func: RefreshMappingsFunc = refresh_mappings,
+    search_func: SearchFunc = default_search,
 ) -> Starlette:
     """Build the app with a fresh engine/session factory in app.state, so
     tests can inject an isolated (e.g. in-memory SQLite) engine and/or an
@@ -263,7 +337,8 @@ def create_app(
     mcp_server.publish.publish_mapping / scripts.refresh_wiki_cache.refresh_mappings
     — tests always inject fakes for both, since the real ones perform a
     live, irreversible MediaWiki write and a real network fetch
-    respectively.
+    respectively. `search_func` defaults to the real rag.retrieval.search —
+    tests inject a fake to avoid the real embedding-model-backed index.
     """
 
     resolved_engine = engine or create_engine(settings=settings)
@@ -279,6 +354,7 @@ def create_app(
     app.state.session_factory = session_factory(resolved_engine)
     app.state.publish_func = publish_func
     app.state.refresh_mappings_func = refresh_mappings_func
+    app.state.search_func = search_func
     return app
 
 

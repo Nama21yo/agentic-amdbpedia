@@ -28,8 +28,9 @@ from __future__ import annotations
 import importlib
 import logging
 import uuid
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, TypedDict, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -341,6 +342,23 @@ async def _persist_node(state: PipelineState) -> dict[str, Any]:
 
 PipelineNode = Callable[[PipelineState], dict[str, Any] | Awaitable[dict[str, Any]]]
 
+# Shared by _build_graph() and stream_mapping_pipeline() (16.3's SSE
+# endpoint) so both the LangGraph path and the sequential/no-streaming
+# fallback report the exact same node names to a caller either way.
+NODE_SEQUENCE: list[tuple[str, PipelineNode]] = [
+    ("extract_infobox_fields", _extract_node),
+    ("predict_properties", _predict_node),
+    ("format_mapping_syntax", _format_node),
+    ("persist_review_item", _persist_node),
+]
+
+NODE_LABELS: dict[str, str] = {
+    "extract_infobox_fields": "Extracting infobox fields",
+    "predict_properties": "Predicting ontology properties",
+    "format_mapping_syntax": "Generating mapping XML",
+    "persist_review_item": "Saving to review queue",
+}
+
 
 class _SequentialPipelineGraph:
     """Async-aware sequential fallback for when `langgraph` isn't
@@ -348,12 +366,12 @@ class _SequentialPipelineGraph:
     `_SequentialMappingAgentGraph`, extended to await async nodes too
     (this pipeline's persist step genuinely needs one)."""
 
-    def __init__(self, nodes: Sequence[PipelineNode]) -> None:
+    def __init__(self, nodes: Sequence[tuple[str, PipelineNode]]) -> None:
         self._nodes = nodes
 
     async def ainvoke(self, initial_state: PipelineState) -> PipelineState:
         state: dict[str, Any] = dict(initial_state)
-        for node in self._nodes:
+        for _name, node in self._nodes:
             updates = node(cast(PipelineState, state))
             if isinstance(updates, Awaitable):
                 updates = await updates
@@ -362,20 +380,16 @@ class _SequentialPipelineGraph:
 
 
 def _build_graph() -> Any:
-    nodes: list[PipelineNode] = [_extract_node, _predict_node, _format_node, _persist_node]
     if StateGraph is None:
-        return _SequentialPipelineGraph(nodes)
+        return _SequentialPipelineGraph(NODE_SEQUENCE)
 
     workflow = StateGraph(PipelineState)
-    workflow.add_node("extract_infobox_fields", _extract_node)
-    workflow.add_node("predict_properties", _predict_node)
-    workflow.add_node("format_mapping_syntax", _format_node)
-    workflow.add_node("persist_review_item", _persist_node)
-    workflow.set_entry_point("extract_infobox_fields")
-    workflow.add_edge("extract_infobox_fields", "predict_properties")
-    workflow.add_edge("predict_properties", "format_mapping_syntax")
-    workflow.add_edge("format_mapping_syntax", "persist_review_item")
-    workflow.add_edge("persist_review_item", END)
+    for name, node in NODE_SEQUENCE:
+        workflow.add_node(name, node)
+    workflow.set_entry_point(NODE_SEQUENCE[0][0])
+    for (from_name, _), (to_name, _) in zip(NODE_SEQUENCE, NODE_SEQUENCE[1:], strict=False):
+        workflow.add_edge(from_name, to_name)
+    workflow.add_edge(NODE_SEQUENCE[-1][0], END)
     return workflow.compile()
 
 
@@ -410,19 +424,13 @@ async def run_mapping_pipeline(
     """
 
     resolved_run_id = run_id or str(uuid.uuid4())
-    initial_state: PipelineState = {
-        "wikitext": wikitext,
-        "domain_class": domain_class,
-        "run_id": resolved_run_id,
-        "session": session,
-        # `mapping_index or ...` would be wrong here: AmharicMappingIndex
-        # defines __len__, so a deliberately empty (but valid) index is
-        # falsy and would get silently replaced by the default cache.
-        "mapping_index": (
-            mapping_index if mapping_index is not None else AmharicMappingIndex.from_default_cache()
-        ),
-        "warnings": [],
-    }
+    initial_state = _build_initial_state(
+        wikitext,
+        domain_class=domain_class,
+        session=session,
+        run_id=resolved_run_id,
+        mapping_index=mapping_index,
+    )
 
     graph = _build_graph()
     final_state = await graph.ainvoke(initial_state)
@@ -444,3 +452,94 @@ async def run_mapping_pipeline(
         warnings=final_state.get("warnings", []),
         review_item_id=final_state.get("review_item_id"),
     )
+
+
+def _build_initial_state(
+    wikitext: str,
+    *,
+    domain_class: str,
+    session: AsyncSession,
+    run_id: str,
+    mapping_index: AmharicMappingIndex | None,
+) -> PipelineState:
+    return {
+        "wikitext": wikitext,
+        "domain_class": domain_class,
+        "run_id": run_id,
+        "session": session,
+        # `mapping_index or ...` would be wrong here: AmharicMappingIndex
+        # defines __len__, so a deliberately empty (but valid) index is
+        # falsy and would get silently replaced by the default cache.
+        "mapping_index": (
+            mapping_index if mapping_index is not None else AmharicMappingIndex.from_default_cache()
+        ),
+        "warnings": [],
+    }
+
+
+async def stream_mapping_pipeline(
+    wikitext: str,
+    *,
+    domain_class: str,
+    session: AsyncSession,
+    run_id: str | None = None,
+    mapping_index: AmharicMappingIndex | None = None,
+) -> AsyncIterator[dict[str, Any]]:
+    """The same extract -> predict -> format -> persist pipeline as
+    `run_mapping_pipeline`, yielding one event per completed node instead
+    of just the final result — for `mcp_server/http_app.py`'s SSE
+    `POST /v1/preview` (16.3).
+
+    Each yielded dict matches `frontend/src/lib/types.ts::AgentStep`
+    (`{node, status, detail, timestamp}`) until the final event, which
+    matches `frontend/src/lib/api.ts::previewMapping`'s `PreviewEvent`
+    "result" branch (`{node: "result", mappings}`) exactly.
+
+    Uses the compiled LangGraph's own `astream()` when `langgraph` is
+    installed (yields `{node_name: state_delta}` per step — verified
+    directly, not assumed, before relying on it) and a manual per-node
+    loop otherwise, so both paths report identical node names via the
+    shared `NODE_SEQUENCE`.
+    """
+
+    resolved_run_id = run_id or str(uuid.uuid4())
+    initial_state = _build_initial_state(
+        wikitext,
+        domain_class=domain_class,
+        session=session,
+        run_id=resolved_run_id,
+        mapping_index=mapping_index,
+    )
+
+    state: dict[str, Any] = dict(initial_state)
+
+    if StateGraph is not None:
+        graph = _build_graph()
+        async for chunk in graph.astream(initial_state):
+            for node_name, delta in chunk.items():
+                state.update(delta)
+                yield _step_event(node_name)
+    else:
+        for node_name, node in NODE_SEQUENCE:
+            updates = node(cast(PipelineState, state))
+            if isinstance(updates, Awaitable):
+                updates = await updates
+            state.update(updates)
+            yield _step_event(node_name)
+
+    log_event(
+        LOGGER,
+        "pipeline.stream_completed",
+        run_id=resolved_run_id,
+        mapping_count=len(state.get("mappings", [])),
+    )
+    yield {"node": "result", "mappings": state.get("mappings", [])}
+
+
+def _step_event(node_name: str) -> dict[str, Any]:
+    return {
+        "node": node_name,
+        "status": "done",
+        "detail": NODE_LABELS.get(node_name, node_name),
+        "timestamp": datetime.now(UTC).isoformat(),
+    }

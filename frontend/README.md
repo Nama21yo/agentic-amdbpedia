@@ -10,18 +10,22 @@ The web UI for the "prepare a mapping for this infobox" workflow: SvelteKit 5
 
 ## What's real vs. planned
 
-This is a starter, not a finished product. The UI, routing, and API client
-are real and functional; most of the endpoints they call are **not yet
-implemented on the backend**. Each API function in `src/lib/api.ts` is
-labeled `PLANNED` or `EXISTING` in its doc comment. Until the planned
-endpoints exist, every screen fails closed into a visible "not reachable
-yet" message instead of crashing or showing fake data — that's intentional,
-not a bug to fix later.
+The UI, routing, and API client are real and functional. As of
+implementation.md Phase 2 Milestone 16, every `cross-lingual`-side endpoint
+this frontend calls now exists on the real backend
+(`mcp_server/http_app.py`, run with `uvicorn mcp_server.http_app:app`
+alongside the MCP stdio server) — only `getCoverageStats`, which talks to
+`agentic-dbpedia`'s own statistics service, remains unconfirmed against
+this client. Each API function in `src/lib/api.ts` is still labeled
+`PLANNED` or `EXISTING` in its doc comment for whichever endpoints haven't
+caught up yet. A screen whose endpoint isn't reachable fails closed into a
+visible "not reachable yet" message instead of crashing or showing fake
+data — that's intentional, not a bug to fix later.
 
 | Screen                       | Calls                                           | Status                                                                             |
 | ---------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Mapping Assistant (`/`)      | `agentic-dbpedia` `/api/v2/agent/preview` (SSE) | Planned                                                                            |
-| Mapping Assistant chat panel | `cross-lingual` `/v1/find-semantic-match`       | Planned — cross-lingual is currently MCP-stdio only                                |
+| Mapping Assistant (`/`)      | `cross-lingual` `POST /v1/preview` (SSE)        | **Exists** — `mcp_server/http_app.py`, refs implementation.md 16.3                 |
+| Mapping Assistant chat panel | `cross-lingual` `/v1/find-semantic-match`       | **Exists** — refs implementation.md 16.3                                           |
 | Review Queue (`/review`)     | `cross-lingual` `GET /v1/reviews`               | **Exists** — `mcp_server/http_app.py`, refs implementation.md 14.1                 |
 | Review Queue (`/review`)     | `cross-lingual` `POST /v1/reviews/:id/decision` | **Exists** — refs implementation.md 14.2/14.3 (correction + publish support)       |
 | Coverage (`/coverage`)       | `agentic-dbpedia` `/api/statistics/summary`     | Backend route exists already; response shape not yet confirmed against this client |
