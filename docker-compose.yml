@@ -16,5 +16,19 @@ services:
       retries: 6
       start_period: 5s
 
+  # Manual/documentation convenience only (refs implementation.md 15.1) --
+  # mcp_server/qa.py::verify_extraction() never depends on this service
+  # being up; it starts and stops its own throwaway container per
+  # verification call (`docker run ... -f <specific .nt file>`). Useful
+  # here for poking at a loaded graph by hand: `docker compose run --rm
+  # tentris -f /data/<file>.nt` (mount the file under ./data first).
+  tentris:
+    image: dicegroup/tentris_server:latest
+    ports:
+      - "9080:9080"
+    volumes:
+      - ./data:/data:ro
+    command: ["-p", "9080", "--logfile=false"]
+
 volumes:
   postgres_data:

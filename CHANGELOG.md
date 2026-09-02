@@ -1,5 +1,6 @@
 # Changelog
 
+- `feat(qa): load DEF output into Tentris and verify via SPARQL (refs 15.1)`
 - `feat(publish): consent-gated MediaWiki publish wired into the decision endpoint (refs 14.3)`
 - `feat(review): decision endpoint wired to training-log capture (refs 14.2)`
 - `feat(review): Postgres-backed review queue schema and HTTP layer (refs 14.1)`
