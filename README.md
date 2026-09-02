@@ -42,6 +42,38 @@ legacy `data/*.md` demo corpus, embedded once per process and ranked with
 reciprocal rank fusion — no external vector database. Structured JSON logs
 carry a correlation ID across MCP, RAG, and agent layers.
 
+### The pipeline surface (frontend, review queue, publish)
+
+The MCP tools above are one way in. The other is a full paste-an-infobox
+workflow, aimed at human reviewers rather than an MCP client:
+
+```mermaid
+flowchart LR
+    A2[Amharic infobox wikitext] --> B2[extract_infobox_fields]
+    B2 --> C2[predict_properties: retrieve-then-rerank via Gemma 2 9B]
+    C2 --> D2[format_mapping_syntax]
+    D2 --> E2[persist_review_item: Postgres review queue]
+    E2 --> F2{Human decision}
+    F2 -->|approve + publish| G2[Consent-gated MediaWiki edit]
+    F2 -->|reject / correct| E2
+    G2 --> H2[verify_extraction: Tentris SPARQL check]
+```
+
+`mcp_server/pipeline.py` runs this as a 4-node LangGraph graph (a sequential
+fallback runs the same nodes if `langgraph` isn't installed) and streams each
+node's progress over `POST /v1/preview` (SSE) on a separate Starlette app,
+`mcp_server/http_app.py`. The SvelteKit frontend in `frontend/` is the
+reviewer-facing client: a Mapping Assistant page that pastes wikitext and
+watches the pipeline stream live, and a Review Queue page that lists
+`pending_review` rows and records approve/reject/correct decisions — every
+decision is logged as DSPy training data (`rag/training_log.py`) regardless
+of outcome. Publishing a mapping back to `mappings.dbpedia.org` is a real,
+outward-facing MediaWiki edit and is never automatic: it requires the
+reviewer's explicit `publish: true` on the decision call, gated by
+`mcp_server/consent.py::require_consent`. `mcp_server/qa.py::verify_extraction`
+closes the loop by loading a `.nt` extraction file into a throwaway
+Tentris container and checking the published triple actually appears.
+
 ## Development
 
 ```bash
@@ -55,6 +87,21 @@ just validate-corpus
 
 Integration and e2e tests download the real dense/sparse models on first run
 (network required) — no external service needs to be started first.
+
+### Running the pipeline surface
+
+```bash
+docker compose up -d postgres   # or leave DATABASE_URL unset for local SQLite
+just run-http                   # POST /v1/preview, /v1/find-semantic-match, /v1/reviews...
+cd frontend && pnpm install && pnpm run dev --open
+```
+
+The frontend defaults to `http://localhost:8001` for `just run-http`
+(`PUBLIC_CROSS_LINGUAL_URL` in `frontend/.env`) — see `frontend/README.md`
+for the full endpoint-to-screen mapping. Retrieve-then-rerank prediction
+(`rag/predict.py`) additionally wants a local Ollama server serving
+`gemma2:9b`; without one, predictions still work off retrieval alone
+(`used_llm: false` in the response) rather than failing.
 
 ## Claude Desktop
 
@@ -112,16 +159,35 @@ dependencies, and lets Pydantic load the intended `.env`. The server exposes
 | Circuit-breaker degradation | 9.3 | `tests/test_error_handling.py::test_retrieval_circuit_breaker_degrades_after_failure` |
 | Latency budgets | 9.4 | `tests/perf/test_latency.py::test_react_happy_path_latency_budget` |
 | Final documentation traceability | 9.5 | `tests/test_docs.py::test_traceability_matrix_entries_reference_existing_tests` |
+| Infobox extraction node | 16.1 | `tests/test_pipeline.py::test_extract_infobox` |
+| LangGraph pipeline: extract → predict → format → persist | 16.2 | `tests/test_pipeline_orchestration.py::test_full_pipeline_end_to_end_produces_a_pending_review_row_with_length_predicted` |
+| SSE preview endpoint matching the frontend's contract | 16.3 | `tests/test_http_pipeline_routes.py::test_preview_streams_one_event_per_node_and_a_final_result` |
+| Postgres-backed review queue | 14.1 | `tests/test_review_queue.py::test_create_review_item_persists_a_row` |
+| Consent-gated MediaWiki publish | 14.3 | `tests/test_publish.py::test_publish_is_refused_without_consent` |
+| Decision-to-publish wiring on the review endpoint | 14.3 | `tests/test_review_queue.py::test_decide_review_with_publish_true_publishes_and_refreshes` |
+| Post-publish SPARQL verification | 15.1 | `tests/test_qa.py::test_verify_extraction_returns_true_for_a_present_triple` |
 
 ## Current Milestone
 
-Milestones 0 through 9 are implemented. Remaining work is optional extension and
+All of `implementation.md`'s Phase 1 (Milestones 0–9: retrieval, MCP tools,
+the Groq agent, evaluation) and Phase 2 (Milestones 10–16: in-process
+retrieval replacing Qdrant, retrieve-then-rerank prediction, the Postgres
+review queue, consent-gated MediaWiki publish, Tentris-backed post-publish
+verification, and the LangGraph pipeline + SvelteKit frontend that ties all
+of it together) are implemented. Remaining work is optional extension and
 production deployment packaging beyond the roadmap.
 
 ## Future Work
 
 - Add multi-query or step-back query transformation as a second advanced RAG
   technique for vague Amharic fields.
-- Add consent-gated DBpedia Databus publishing as a real destructive MCP tool.
 - Extend the alias corpus and evaluation set to more Ethiopian and multilingual
   Wikipedia communities beyond Amharic.
+- Auto-trigger `agentic-dbpedia`'s DEF extraction (and this repo's
+  `verify_extraction` check) after a publish, instead of the current manual
+  trigger.
+- Real auth on the frontend and HTTP API — deliberately deferred for this
+  internal-tool iteration (see `frontend/README.md`).
+- Fine-tune the DSPy predictor on the training log `rag/training_log.py`
+  accumulates from every review decision, rather than relying on the
+  base Gemma 2 9B retrieve-then-rerank prompt indefinitely.
