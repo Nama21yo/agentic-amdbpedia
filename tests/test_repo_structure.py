@@ -22,6 +22,7 @@ def test_scaffold_paths_exist() -> None:
         "mcp_server/server.py",
         "mcp_server/agent.py",
         "mcp_server/http_app.py",
+        "mcp_server/pipeline.py",
         "mcp_server/publish.py",
         "mcp_server/qa.py",
         "evaluation/test_queries.json",
