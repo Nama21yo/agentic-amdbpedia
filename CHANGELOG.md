@@ -1,5 +1,6 @@
 # Changelog
 
+- `feat(pipeline): LangGraph orchestration — extract → predict → format → persist (refs 16.2)`
 - `feat(pipeline): infobox extraction node, ported from agentic-dbpedia's DumpTemplateParser (refs 16.1)`
 - `feat(qa): load DEF output into Tentris and verify via SPARQL (refs 15.1)`
 - `feat(publish): consent-gated MediaWiki publish wired into the decision endpoint (refs 14.3)`
