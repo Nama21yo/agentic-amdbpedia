@@ -53,11 +53,8 @@ just test-perf
 just validate-corpus
 ```
 
-Start local Qdrant before integration or e2e tests:
-
-```bash
-docker compose up -d qdrant
-```
+Integration and e2e tests download the real dense/sparse models on first run
+(network required) — no external service needs to be started first.
 
 ## Claude Desktop
 
@@ -67,8 +64,8 @@ Generate an MCP configuration block for this checkout:
 uv run python scripts/print_desktop_config.py
 ```
 
-Keep `GROQ_API_KEY`, `QDRANT_URL`, and `QDRANT_API_KEY` in the ignored project
-`.env`; do not copy credentials into `claude_desktop_config.json`. Paste the
+Keep `GROQ_API_KEY` in the ignored project `.env`; do not copy credentials
+into `claude_desktop_config.json`. Paste the
 generated credential-free block into the desktop config and restart Claude
 Desktop. The generated command changes to the project directory before startup,
 pins Python 3.11 for MCP compatibility, installs only frozen runtime
@@ -110,7 +107,7 @@ dependencies, and lets Pydantic load the intended `.env`. The server exposes
 | Evaluation report determinism | 7.4 | `tests/test_eval_harness.py::test_results_md_generation_is_deterministic` |
 | Demo transcripts | 8.1 | `tests/test_docs.py::test_demo_transcripts_cover_required_paths` |
 | Structured logs and correlation IDs | 9.1 | `tests/test_observability.py::test_correlation_id_propagates_across_layers` |
-| Centralized error taxonomy | 9.2 | `tests/test_error_handling.py::test_mcp_boundary_maps_qdrant_down_to_client_safe_error` |
+| Centralized error taxonomy | 9.2 | `tests/test_error_handling.py::test_mcp_boundary_maps_retrieval_failure_to_client_safe_error` |
 | Full e2e pipeline | 9.3 | `tests/e2e/test_full_pipeline.py::test_full_e2e_retrieve_agent_generate_xml` |
 | Circuit-breaker degradation | 9.3 | `tests/test_error_handling.py::test_retrieval_circuit_breaker_degrades_after_failure` |
 | Latency budgets | 9.4 | `tests/perf/test_latency.py::test_react_happy_path_latency_budget` |

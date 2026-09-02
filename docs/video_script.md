@@ -9,17 +9,16 @@ translation does not reliably produce DBpedia ontology identifiers such as
 ## Architecture
 
 Show the README architecture diagram. Walk through sanitizer, dense/sparse query
-encoding, Qdrant hybrid retrieval, grounded ReAct agent, deterministic MCP XML
-tool, and benchmark resource.
+encoding, in-process hybrid retrieval over the real DBpedia ontology corpus,
+grounded ReAct agent, deterministic MCP XML tool, and benchmark resource.
 
 ## Live Demo
 
 1. Run `just validate-corpus`.
-2. Run `docker compose up -d qdrant`.
-3. Run `just test-integration`.
-4. Show `uv run python scripts/print_desktop_config.py` and the Claude Desktop
+2. Run `just test-integration`.
+3. Show `uv run python scripts/print_desktop_config.py` and the Claude Desktop
    config block.
-5. Walk through `examples/demo.md` successful mapping, no-match fallback, and
+4. Walk through `examples/demo.md` successful mapping, no-match fallback, and
    injection rejection transcripts.
 
 ## Evaluation
@@ -34,7 +33,7 @@ Show:
 
 - `tests/test_mcp_server.py::test_generate_mapping_syntax_escapes_injection_attempt`
 - `tests/test_agent_guardrails.py::test_agent_never_emits_raw_xml_not_from_tool`
-- `tests/test_error_handling.py::test_mcp_boundary_maps_qdrant_down_to_client_safe_error`
+- `tests/test_error_handling.py::test_mcp_boundary_maps_retrieval_failure_to_client_safe_error`
 - `tests/test_observability.py::test_correlation_id_propagates_across_layers`
 
 ## Learnings

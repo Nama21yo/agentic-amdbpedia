@@ -12,7 +12,6 @@ dependencies = [
     "pydantic>=2.11.0",
     "pydantic-settings>=2.10.0",
     "python-dotenv>=1.1.0",
-    "qdrant-client>=1.14.0",
     "sentence-transformers>=6.0.1",
     "torch>=2.2",
 ]
@@ -61,8 +60,6 @@ files = ["config.py", "errors.py", "logging_config.py", "rag", "mcp_server", "sc
 module = [
     "fastembed",
     "fastembed.*",
-    "qdrant_client",
-    "qdrant_client.*",
     "sentence_transformers",
     "sentence_transformers.*",
 ]
@@ -72,7 +69,7 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
-    "integration: tests that require external services such as Qdrant",
+    "integration: tests that require network access to download real embedding models",
     "e2e: full end-to-end tests",
     "perf: scheduled latency budget benchmarks",
 ]

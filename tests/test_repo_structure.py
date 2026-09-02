@@ -8,7 +8,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 def test_scaffold_paths_exist() -> None:
     required_paths = [
         "README.md",
-        "docker-compose.yml",
+        # docker-compose.yml removed with Qdrant (refs 10.4); returns when
+        # Postgres (M14) or Tentris (M15) need a service to run.
         "pyproject.toml",
         "data",
         "rag/__init__.py",

@@ -15,15 +15,11 @@ from errors import RetrievalUnavailableError
 if TYPE_CHECKING:
     from sentence_transformers import SentenceTransformer
 
-DENSE_VECTOR_NAME = "dense"
-SPARSE_VECTOR_NAME = "sparse"
-
 # dice-research/amharic-property-retriever-afro-xlmr-base — the same model
 # LLMIntegration/llm_raranker.py already benchmarks with, fine-tuned for
 # Amharic-to-English DBpedia property retrieval specifically (refs 10.2).
 DEFAULT_DENSE_MODEL = "dice-research/amharic-property-retriever-afro-xlmr-base"
-DEFAULT_SPARSE_MODEL = "Qdrant/bm25"
-DEFAULT_DENSE_VECTOR_SIZE = 1024  # DEFAULT_DENSE_MODEL's real embedding dimension
+DEFAULT_SPARSE_MODEL = "Qdrant/bm25"  # a FastEmbed model name, not the Qdrant service
 DEFAULT_EMBEDDING_DEVICE = "cpu"
 TOKEN_RE = re.compile(r"[\wሀ-፿]+", re.UNICODE)
 
@@ -35,7 +31,7 @@ _SPARSE_MODEL_CACHE_LOCK = threading.Lock()
 
 @dataclass(frozen=True)
 class SparseVector:
-    """Sparse vector representation independent of a Qdrant import."""
+    """Sparse vector representation, independent of any vector-database client."""
 
     indices: list[int]
     values: list[float]
@@ -67,9 +63,8 @@ def lexical_sparse_vector(text: str, *, buckets: int = 65536) -> SparseVector:
 def deterministic_dense_vector(text: str, *, size: int = 16) -> list[float]:
     """Create a deterministic dense vector for tests and offline demos.
 
-    Kept only for rag/indexing.py's Qdrant unit tests, which stub out the real
-    dense model to stay network-free — that whole module goes away with the
-    in-process retriever in 10.3, and this helper goes with it (refs 10.2).
+    Kept as a cheap, network-free stand-in for the real dense model — used by
+    tests that need offline determinism, not real semantic similarity.
     """
 
     vector = [0.0] * size
@@ -246,9 +241,3 @@ def embed_sparse_batch(
         )
         for embedding in embeddings
     ]
-
-
-def qdrant_sparse_vector(vector: SparseVector) -> Any:
-    from qdrant_client import models
-
-    return models.SparseVector(indices=vector.indices, values=vector.values)

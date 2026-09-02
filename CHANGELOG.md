@@ -1,5 +1,6 @@
 # Changelog
 
+- `chore(infra): remove Qdrant entirely — dependency, docker-compose, config fields, startup check, justfile/pre-commit uv run switch (refs 10.4)`
 - `feat(rag): in-process retriever replacing Qdrant hybrid search, real ontology corpus, batched embedding (refs 10.3)`
 - `feat(rag): replace hash-fingerprint dense embeddings with real afro-xlmr model, restore real FastEmbed BM25 sparse retrieval, run torch CPU-only (refs 10.2)`
 - `feat(ontology): port DbpediaOntologyCatalog and AmharicMappingIndex from agentic-dbpedia, seed cached wiki exports (refs 10.1)`

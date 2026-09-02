@@ -33,7 +33,7 @@ class FakeSettings:
     groq_model_reasoning = "llama-3.3-70b-versatile"
 
 
-def test_mcp_boundary_maps_qdrant_down_to_client_safe_error() -> None:
+def test_mcp_boundary_maps_retrieval_failure_to_client_safe_error() -> None:
     def search_func(_: str, **__: Any) -> list[Any]:
         raise OSError("connection refused with stack-ish detail")
 

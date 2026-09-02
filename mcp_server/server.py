@@ -79,10 +79,16 @@ def _safe_error_json(error: ClientSafeError) -> str:
 def validate_startup(
     *,
     settings: Settings | None = None,
-    qdrant_checker: Any | None = None,
     skip_checks: bool | None = None,
 ) -> None:
-    """Fail clearly when required services/secrets are unavailable."""
+    """Fail clearly when required secrets are unavailable.
+
+    Retrieval no longer depends on a reachable external service (refs 10.4):
+    the ontology index is embedded in-process, and a model-load failure
+    surfaces as a RetrievalUnavailableError at first use rather than a
+    startup precondition — checking it here would force a full ~2,948
+    -property embedding pass (minutes) into every server start.
+    """
 
     if skip_checks is None:
         skip_checks = os.environ.get("MCP_SERVER_SKIP_STARTUP_CHECKS") == "1"
@@ -91,19 +97,9 @@ def validate_startup(
         return
 
     try:
-        resolved = settings or Settings()
+        _resolved = settings or Settings()
     except ValidationError as exc:
         raise StartupError(f"Missing or invalid server configuration: {exc}") from exc
-
-    try:
-        checker = qdrant_checker
-        if checker is None:
-            from qdrant_client import QdrantClient
-
-            checker = QdrantClient(url=resolved.qdrant_url, api_key=resolved.qdrant_api_key)
-        checker.get_collections()
-    except Exception as exc:
-        raise StartupError(f"Qdrant is not reachable at {resolved.qdrant_url}: {exc}") from exc
 
 
 def _result_to_payload(result: SearchResult) -> dict[str, Any]:

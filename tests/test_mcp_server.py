@@ -23,15 +23,29 @@ from mcp_server.server import (
 from rag.retrieval import NoMatchFound, SearchResult
 
 
-def test_startup_fails_loudly_without_qdrant(monkeypatch: pytest.MonkeyPatch) -> None:
-    class BrokenClient:
-        def get_collections(self) -> None:
-            raise OSError("connection refused")
+def test_startup_fails_loudly_without_groq_key(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    # Settings() also reads the project's own (gitignored, real-secret) .env
+    # file relative to CWD; chdir somewhere without one so a missing
+    # GROQ_API_KEY actually stays missing for this test.
+    monkeypatch.chdir(tmp_path)
 
+    with pytest.raises(StartupError, match="Missing or invalid server configuration"):
+        validate_startup()
+
+
+def test_startup_succeeds_with_valid_config(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GROQ_API_KEY", "gsk_test_placeholder")
 
-    with pytest.raises(StartupError, match="Qdrant is not reachable"):
-        validate_startup(qdrant_checker=BrokenClient())
+    validate_startup()  # must not raise
+
+
+def test_startup_checks_can_be_skipped(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+
+    validate_startup(skip_checks=True)  # must not raise despite missing config
 
 
 def test_find_semantic_match_rejects_empty_input() -> None:
@@ -49,9 +63,9 @@ def test_find_semantic_match_rejects_empty_input() -> None:
     assert called is False
 
 
-def test_find_semantic_match_handles_qdrant_outage() -> None:
+def test_find_semantic_match_handles_retrieval_outage() -> None:
     def search_func(*_: Any, **__: Any) -> list[Any]:
-        raise TimeoutError("qdrant timeout")
+        raise TimeoutError("embedding model timeout")
 
     payload = json.loads(find_semantic_match_impl("አይካኦ_ኮድ", search_func=search_func))
 

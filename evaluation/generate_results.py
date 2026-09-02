@@ -83,7 +83,7 @@ def generate_results_markdown(
             "",
             "1. Acronym Collision Failure: Amharic fields mixed with Latin acronyms such as "
             "`አይካኦ_ኮድ ICAO` can be misranked by semantic-only retrieval. Mitigation: sparse "
-            "alias keyword folding plus Qdrant RRF hybrid search. Proof test: "
+            "alias keyword folding plus in-process RRF hybrid search. Proof test: "
             "`tests/integration/test_retrieval_precision.py::test_acronym_collision_sparse_channel_rescues_icao`.",
             "",
             "2. Data-Type Hallucination: LLM-authored XML can invent properties or malformed "

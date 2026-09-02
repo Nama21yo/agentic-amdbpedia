@@ -48,8 +48,6 @@ jobs:
           python-version: "3.11"
       - uses: astral-sh/setup-uv@v6
       - uses: extractions/setup-just@v3
-      - name: Start Qdrant
-        run: docker compose up -d qdrant
       - name: Integration tests
         run: just test-integration
   e2e-test:
@@ -62,8 +60,6 @@ jobs:
           python-version: "3.11"
       - uses: astral-sh/setup-uv@v6
       - uses: extractions/setup-just@v3
-      - name: Start Qdrant
-        run: docker compose up -d qdrant
       - name: End-to-end tests
         run: just test-e2e
   perf-test:

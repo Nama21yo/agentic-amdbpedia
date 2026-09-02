@@ -70,6 +70,16 @@ def test_runtime_just_recipes_use_frozen_python_311_without_dev_dependencies() -
     justfile = (PROJECT_ROOT / "justfile").read_text(encoding="utf-8")
 
     runtime_command = "uv run --frozen --no-dev --python 3.11 python"
-    assert f"{runtime_command} scripts/wait_for_qdrant.py" in justfile
     assert f"{runtime_command} mcp_server/server.py" in justfile
     assert f"{runtime_command} scripts/validate_corpus.py data" in justfile
+
+
+def test_just_test_recipes_use_the_frozen_project_venv() -> None:
+    justfile = (PROJECT_ROOT / "justfile").read_text(encoding="utf-8")
+
+    assert (
+        'uv run --frozen --python 3.11 pytest -m "not integration and not e2e and not perf"'
+        in justfile
+    )
+    for marker in ("integration", "e2e", "perf"):
+        assert f"uv run --frozen --python 3.11 pytest -m {marker}" in justfile
