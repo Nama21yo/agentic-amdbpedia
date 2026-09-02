@@ -8,5 +8,6 @@ __pycache__/
 .coverage
 .uv-cache/
 .uv-tools/
-qdrant_data/
 .serena/
+data/training_examples.jsonl
+data/training_exports/
