@@ -1,5 +1,6 @@
 # Changelog
 
+- `feat(corpus): pull ontology + Amharic mappings via MediaWiki Special:Export (refs 12.1)`
 - `feat(predict): port Gemma 2 9B retrieve-then-rerank predictor from LLMIntegration, graceful Ollama fallback (refs 11.1, 11.2)`
 - `chore(infra): remove Qdrant entirely — dependency, docker-compose, config fields, startup check, justfile/pre-commit uv run switch (refs 10.4)`
 - `feat(rag): in-process retriever replacing Qdrant hybrid search, real ontology corpus, batched embedding (refs 10.3)`
