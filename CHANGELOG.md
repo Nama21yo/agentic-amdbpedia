@@ -1,5 +1,6 @@
 # Changelog
 
+- `feat(publish): consent-gated MediaWiki publish wired into the decision endpoint (refs 14.3)`
 - `feat(review): decision endpoint wired to training-log capture (refs 14.2)`
 - `feat(review): Postgres-backed review queue schema and HTTP layer (refs 14.1)`
 - `chore(training): export script matching LLMIntegration's dataset format, verified via datasets.load_dataset (refs 13.2)`

@@ -13,7 +13,7 @@ just "close enough".
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -39,7 +39,10 @@ from db.session import (
 )
 from errors import AssistantValidationError, ClientSafeError
 from logging_config import correlation_context, get_correlation_id, log_event
+from mcp_server.consent import ConsentRequiredError, require_consent
+from mcp_server.publish import PublishError, publish_mapping
 from rag.training_log import DEFAULT_LOG_PATH, log_decision
+from scripts.refresh_wiki_cache import refresh_mappings
 
 LOGGER = logging.getLogger("dbpedia_mapping_assistant.http")
 
@@ -47,6 +50,9 @@ REQUIRED_CREATE_FIELDS = ("run_id", "template_name", "domain_class", "mappings")
 # frontend/src/lib/api.ts::decideReview's "approved"/"rejected" ->
 # db.models.REVIEW_STATUSES.
 DECISION_TO_STATUS = {"approved": "approved", "rejected": "rejected"}
+
+PublishFunc = Callable[..., str]
+RefreshMappingsFunc = Callable[..., int]
 
 
 def _error_response(error: ClientSafeError, status_code: int) -> JSONResponse:
@@ -127,6 +133,16 @@ async def decide_review(request: Request) -> JSONResponse:
     reviewer submit an edited answer instead of a bare accept/reject; a
     mapping row whose `ontologyProperty` differs from what was originally
     predicted for that `templateProperty` logs `was_correction: true`.
+
+    An optional `publish: true` alongside `decision: "approved"` is this
+    endpoint's explicit consent to the real, outward-facing, hard-to
+    -reverse action: it publishes the mapping to the live MediaWiki
+    (mcp_server.publish.publish_mapping, gated through
+    mcp_server.consent.require_consent) and, on success, sets status to
+    "published" instead of "approved" and fires 12.2's eager corpus
+    -refresh hook for real. A failed publish leaves status at "approved"
+    (the review decision itself still stands) and reports the failure —
+    never a silent partial state.
     """
 
     with correlation_context():
@@ -192,6 +208,33 @@ async def decide_review(request: Request) -> JSONResponse:
                 await session.commit()
                 await session.refresh(updated)
 
+            want_publish = decision == "approved" and bool(body.get("publish"))
+            if want_publish:
+                publish_func: PublishFunc = request.app.state.publish_func
+                try:
+                    require_consent(approved=True)(publish_func)(
+                        updated.template_name, updated.domain_class, updated.mappings
+                    )
+                except (PublishError, ConsentRequiredError) as exc:
+                    log_event(LOGGER, "http.publish_failed", review_id=review_id, error=str(exc))
+                    payload: dict[str, Any] = (
+                        dict(exc.to_payload())
+                        if isinstance(exc, PublishError)
+                        else {
+                            "status": "error",
+                            "error_type": "consent_required",
+                            "message": str(exc),
+                        }
+                    )
+                    payload["correlation_id"] = get_correlation_id()
+                    payload["review"] = updated.to_api_dict()
+                    return JSONResponse(payload, status_code=502)
+
+                updated = await set_review_status(session, review_id, "published")
+                refresh_func: RefreshMappingsFunc = request.app.state.refresh_mappings_func
+                refresh_func()
+                log_event(LOGGER, "http.review_published", review_id=review_id)
+
         log_event(LOGGER, "http.review_decided", review_id=review_id, decision=decision)
         return JSONResponse(updated.to_api_dict())
 
@@ -209,10 +252,19 @@ def create_app(
     engine: AsyncEngine | None = None,
     settings: Settings | None = None,
     training_log_path: Path | None = None,
+    publish_func: PublishFunc = publish_mapping,
+    refresh_mappings_func: RefreshMappingsFunc = refresh_mappings,
 ) -> Starlette:
     """Build the app with a fresh engine/session factory in app.state, so
     tests can inject an isolated (e.g. in-memory SQLite) engine and/or an
-    isolated training-log path instead of the real configured ones."""
+    isolated training-log path instead of the real configured ones.
+
+    `publish_func`/`refresh_mappings_func` default to the real
+    mcp_server.publish.publish_mapping / scripts.refresh_wiki_cache.refresh_mappings
+    — tests always inject fakes for both, since the real ones perform a
+    live, irreversible MediaWiki write and a real network fetch
+    respectively.
+    """
 
     resolved_engine = engine or create_engine(settings=settings)
 
@@ -225,6 +277,8 @@ def create_app(
     app.state.engine = resolved_engine
     app.state.training_log_path = training_log_path or DEFAULT_LOG_PATH
     app.state.session_factory = session_factory(resolved_engine)
+    app.state.publish_func = publish_func
+    app.state.refresh_mappings_func = refresh_mappings_func
     return app
 
 

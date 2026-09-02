@@ -11,6 +11,7 @@ DEFAULT_RETRIEVAL_CONFIDENCE_THRESHOLD = 0.35
 # A local SQLite file by default -- zero-config for local dev; the real
 # docker-compose Postgres service is opt-in via DATABASE_URL (refs 14.1).
 DEFAULT_DATABASE_URL = "sqlite+aiosqlite:///./data/review_queue.db"
+DEFAULT_MEDIAWIKI_BASE_URL = "https://mappings.dbpedia.org"
 
 
 class Settings(BaseSettings):
@@ -33,3 +34,10 @@ class Settings(BaseSettings):
         alias="RETRIEVAL_CONFIDENCE_THRESHOLD",
     )
     database_url: str = Field(default=DEFAULT_DATABASE_URL, alias="DATABASE_URL")
+    # Bot Password only (Special:BotPasswords) -- never a real MediaWiki
+    # account password. Both unset by default; publish_mapping() fails
+    # clearly (MediaWikiCredentialsError) rather than attempting a request
+    # with empty credentials (refs 14.3).
+    mediawiki_base_url: str = Field(default=DEFAULT_MEDIAWIKI_BASE_URL, alias="MEDIAWIKI_BASE_URL")
+    mediawiki_bot_username: str | None = Field(default=None, alias="MEDIAWIKI_BOT_USERNAME")
+    mediawiki_bot_password: str | None = Field(default=None, alias="MEDIAWIKI_BOT_PASSWORD")

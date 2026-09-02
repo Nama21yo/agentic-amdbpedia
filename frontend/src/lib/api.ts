@@ -93,18 +93,36 @@ export async function listReviewQueue(): Promise<ReviewItem[]> {
 	return res.json();
 }
 
-/** PLANNED: POST {CROSS_LINGUAL_URL}/v1/reviews/{id}/decision — arrives in 14.2. */
+/**
+ * EXISTING: POST {CROSS_LINGUAL_URL}/v1/reviews/{id}/decision
+ * (mcp_server/http_app.py, refs implementation.md 14.2/14.3).
+ *
+ * `correctedMappings`, when given, replaces the review item's predicted
+ * mappings with a reviewer-edited version before logging the decision as
+ * training data. `publish: true` (only meaningful alongside
+ * `decision: "approved"`) is this call's explicit consent to actually
+ * write the mapping to the live MediaWiki — a real, outward-facing,
+ * hard-to-reverse action — and flips status to "published" on success
+ * instead of "approved"; leave it `false`/omitted to just record the
+ * review decision without publishing anything live.
+ */
 export async function decideReview(
 	id: string,
 	decision: 'approved' | 'rejected',
-	reason?: string
-): Promise<void> {
+	options?: { reason?: string; correctedMappings?: PredictedMapping[]; publish?: boolean }
+): Promise<ReviewItem> {
 	const res = await safeFetch(`${CROSS_LINGUAL_URL}/v1/reviews/${id}/decision`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ decision, reason })
+		body: JSON.stringify({
+			decision,
+			reason: options?.reason,
+			corrected_mappings: options?.correctedMappings,
+			publish: options?.publish
+		})
 	});
 	if (!res.ok) throw new BackendUnavailableError(`decision failed: ${res.status}`);
+	return res.json();
 }
 
 /** EXISTING on the backend already (agentic-dbpedia's statistics service). */

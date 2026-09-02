@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -21,6 +22,7 @@ from db.session import (
     set_review_status,
 )
 from mcp_server.http_app import create_app
+from mcp_server.publish import PublishError
 from rag.training_log import read_examples
 
 SAMPLE_MAPPINGS = [
@@ -36,8 +38,18 @@ def _in_memory_engine() -> AsyncEngine:
     )
 
 
-def _make_app(*, training_log_path: Path | None = None) -> Starlette:
-    return create_app(engine=_in_memory_engine(), training_log_path=training_log_path)
+def _make_app(
+    *,
+    training_log_path: Path | None = None,
+    publish_func: Any = None,
+    refresh_mappings_func: Any = None,
+) -> Starlette:
+    kwargs: dict[str, Any] = {"engine": _in_memory_engine(), "training_log_path": training_log_path}
+    if publish_func is not None:
+        kwargs["publish_func"] = publish_func
+    if refresh_mappings_func is not None:
+        kwargs["refresh_mappings_func"] = refresh_mappings_func
+    return create_app(**kwargs)
 
 
 @pytest_asyncio.fixture
@@ -348,6 +360,110 @@ def test_decide_review_returns_404_for_a_missing_review(tmp_path: Path) -> None:
 
         assert response.status_code == 404
         assert response.json()["error_type"] == "not_found"
+
+
+def test_decide_review_with_publish_true_publishes_and_refreshes(tmp_path: Path) -> None:
+    publish_calls: list[tuple[str, str, list[dict[str, str]]]] = []
+    refresh_calls: list[None] = []
+
+    def fake_publish(template_name: str, domain_class: str, mappings: list[dict[str, str]]) -> str:
+        publish_calls.append((template_name, domain_class, mappings))
+        return f"Mapping am:{template_name}"
+
+    def fake_refresh() -> int:
+        refresh_calls.append(None)
+        return 106
+
+    app = _make_app(
+        training_log_path=tmp_path / "training_examples.jsonl",
+        publish_func=fake_publish,
+        refresh_mappings_func=fake_refresh,
+    )
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/v1/reviews",
+            json={
+                "run_id": "run-1",
+                "template_name": "Infobox airport",
+                "domain_class": "Airport",
+                "mappings": SAMPLE_MAPPINGS,
+            },
+        ).json()
+
+        response = client.post(
+            f"/v1/reviews/{created['id']}/decision", json={"decision": "approved", "publish": True}
+        )
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "published"
+
+    assert publish_calls == [("Infobox airport", "Airport", SAMPLE_MAPPINGS)]
+    assert refresh_calls == [None]
+
+
+def test_decide_review_without_publish_flag_never_calls_publish(tmp_path: Path) -> None:
+    publish_calls: list[Any] = []
+
+    def fake_publish(*args: Any, **kwargs: Any) -> str:
+        publish_calls.append((args, kwargs))
+        return "should not be called"
+
+    app = _make_app(
+        training_log_path=tmp_path / "training_examples.jsonl", publish_func=fake_publish
+    )
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/v1/reviews",
+            json={
+                "run_id": "run-1",
+                "template_name": "A",
+                "domain_class": "Airport",
+                "mappings": SAMPLE_MAPPINGS,
+            },
+        ).json()
+
+        response = client.post(
+            f"/v1/reviews/{created['id']}/decision", json={"decision": "approved"}
+        )
+
+        assert response.json()["status"] == "approved"
+
+    assert publish_calls == []
+
+
+def test_decide_review_publish_failure_leaves_status_as_approved(tmp_path: Path) -> None:
+    def failing_publish(*args: Any, **kwargs: Any) -> str:
+        raise PublishError("MediaWiki edit was rejected: simulated failure")
+
+    app = _make_app(
+        training_log_path=tmp_path / "training_examples.jsonl", publish_func=failing_publish
+    )
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/v1/reviews",
+            json={
+                "run_id": "run-1",
+                "template_name": "A",
+                "domain_class": "Airport",
+                "mappings": SAMPLE_MAPPINGS,
+            },
+        ).json()
+
+        response = client.post(
+            f"/v1/reviews/{created['id']}/decision", json={"decision": "approved", "publish": True}
+        )
+
+        assert response.status_code == 502
+        body = response.json()
+        assert body["error_type"] == "publish_failed"
+        # The review decision itself still stands even though publish failed.
+        assert body["review"]["status"] == "approved"
+
+        refetched = client.get(f"/v1/reviews/{created['id']}").json()
+        assert refetched["status"] == "approved"
 
 
 @pytest.mark.integration

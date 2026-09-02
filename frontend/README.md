@@ -23,7 +23,7 @@ not a bug to fix later.
 | Mapping Assistant (`/`)      | `agentic-dbpedia` `/api/v2/agent/preview` (SSE) | Planned                                                                            |
 | Mapping Assistant chat panel | `cross-lingual` `/v1/find-semantic-match`       | Planned — cross-lingual is currently MCP-stdio only                                |
 | Review Queue (`/review`)     | `cross-lingual` `GET /v1/reviews`               | **Exists** — `mcp_server/http_app.py`, refs implementation.md 14.1                 |
-| Review Queue (`/review`)     | `cross-lingual` `POST /v1/reviews/:id/decision` | Planned — arrives in implementation.md 14.2                                        |
+| Review Queue (`/review`)     | `cross-lingual` `POST /v1/reviews/:id/decision` | **Exists** — refs implementation.md 14.2/14.3 (correction + publish support)       |
 | Coverage (`/coverage`)       | `agentic-dbpedia` `/api/statistics/summary`     | Backend route exists already; response shape not yet confirmed against this client |
 
 ## Auth
