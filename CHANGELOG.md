@@ -1,5 +1,6 @@
 # Changelog
 
+- `feat(rag): replace hash-fingerprint dense embeddings with real afro-xlmr model, restore real FastEmbed BM25 sparse retrieval, run torch CPU-only (refs 10.2)`
 - `feat(ontology): port DbpediaOntologyCatalog and AmharicMappingIndex from agentic-dbpedia, seed cached wiki exports (refs 10.1)`
 - `feat(rag): switch local dense embeddings to multilingual e5 small`
 - `fix(mcp): generate Claude Desktop config with explicit uv project`

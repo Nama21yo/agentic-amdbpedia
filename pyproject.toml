@@ -13,7 +13,8 @@ dependencies = [
     "pydantic-settings>=2.10.0",
     "python-dotenv>=1.1.0",
     "qdrant-client>=1.14.0",
-    "sentence-transformers>=5.0.0",
+    "sentence-transformers>=6.0.1",
+    "torch>=2.2",
 ]
 
 [dependency-groups]
@@ -31,6 +32,18 @@ dev = [
 
 [tool.uv]
 package = false
+
+# The embedding model only ever runs on CPU here (see EMBEDDING_DEVICE=cpu in
+# config.py), so pull the CPU-only torch build instead of the multi-GB CUDA
+# wheels sentence-transformers otherwise drags in as a transitive dependency
+# (refs 10.2).
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
 
 [tool.ruff]
 line-length = 100

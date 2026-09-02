@@ -7,10 +7,13 @@ from typing import Any
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from rag.embeddings import DEFAULT_DENSE_MODEL as DEFAULT_DENSE_MODEL
+from rag.embeddings import DEFAULT_EMBEDDING_DEVICE as DEFAULT_EMBEDDING_DEVICE
+from rag.embeddings import DEFAULT_SPARSE_MODEL as DEFAULT_SPARSE_MODEL
+
+# Re-exported from rag.embeddings so there is a single source of truth for
+# which embedding model is the real, currently-active default (refs 10.2).
 DEFAULT_QDRANT_URL = "http://localhost:6333"
-DEFAULT_DENSE_MODEL = "intfloat/multilingual-e5-small"
-DEFAULT_SPARSE_MODEL = "Qdrant/bm25"
-DEFAULT_EMBEDDING_DEVICE = "cpu"
 DEFAULT_RETRIEVAL_CONFIDENCE_THRESHOLD = 0.35
 
 

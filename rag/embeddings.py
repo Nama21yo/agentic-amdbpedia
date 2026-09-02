@@ -5,20 +5,32 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
-from functools import lru_cache
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any
+
+from errors import RetrievalUnavailableError
+
+if TYPE_CHECKING:
+    from sentence_transformers import SentenceTransformer
 
 DENSE_VECTOR_NAME = "dense"
 SPARSE_VECTOR_NAME = "sparse"
-DEFAULT_DENSE_MODEL = "intfloat/multilingual-e5-small"
+
+# dice-research/amharic-property-retriever-afro-xlmr-base — the same model
+# LLMIntegration/llm_raranker.py already benchmarks with, fine-tuned for
+# Amharic-to-English DBpedia property retrieval specifically (refs 10.2).
+DEFAULT_DENSE_MODEL = "dice-research/amharic-property-retriever-afro-xlmr-base"
 DEFAULT_SPARSE_MODEL = "Qdrant/bm25"
-DEFAULT_DENSE_VECTOR_SIZE = 384
+DEFAULT_DENSE_VECTOR_SIZE = 1024  # DEFAULT_DENSE_MODEL's real embedding dimension
 DEFAULT_EMBEDDING_DEVICE = "cpu"
-E5_MODEL_MARKERS = ("e5-small", "e5-base", "e5-large", "multilingual-e5")
-SENTENCE_TRANSFORMER_DENSE_MODELS = (DEFAULT_DENSE_MODEL, "BAAI/bge-m3")
-TOKEN_RE = re.compile(r"[\w\u1200-\u137f]+", re.UNICODE)
+TOKEN_RE = re.compile(r"[\wሀ-፿]+", re.UNICODE)
+
+_DENSE_MODEL_CACHE: dict[str, SentenceTransformer] = {}
+_DENSE_MODEL_CACHE_LOCK = threading.Lock()
+_SPARSE_MODEL_CACHE: dict[str, Any] = {}
+_SPARSE_MODEL_CACHE_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -31,7 +43,6 @@ class SparseVector:
 
 DenseEmbedder = Callable[[str], list[float]]
 SparseEmbedder = Callable[[str], SparseVector]
-DenseInputType = Literal["query", "passage"]
 
 
 def lexical_sparse_vector(text: str, *, buckets: int = 65536) -> SparseVector:
@@ -54,7 +65,12 @@ def lexical_sparse_vector(text: str, *, buckets: int = 65536) -> SparseVector:
 
 
 def deterministic_dense_vector(text: str, *, size: int = 16) -> list[float]:
-    """Create a deterministic dense vector for tests and offline demos."""
+    """Create a deterministic dense vector for tests and offline demos.
+
+    Kept only for rag/indexing.py's Qdrant unit tests, which stub out the real
+    dense model to stay network-free — that whole module goes away with the
+    in-process retriever in 10.3, and this helper goes with it (refs 10.2).
+    """
 
     vector = [0.0] * size
     for token in TOKEN_RE.findall(text.casefold()):
@@ -69,64 +85,71 @@ def deterministic_dense_vector(text: str, *, size: int = 16) -> list[float]:
     return [value / norm for value in vector]
 
 
-def _uses_e5_prefixes(model_name: str) -> bool:
-    normalized_name = model_name.casefold()
-    return any(marker in normalized_name for marker in E5_MODEL_MARKERS)
+def _load_dense_model(model_name: str) -> SentenceTransformer:
+    with _DENSE_MODEL_CACHE_LOCK:
+        cached = _DENSE_MODEL_CACHE.get(model_name)
+        if cached is not None:
+            return cached
+
+        try:
+            from sentence_transformers import SentenceTransformer
+        except ImportError as exc:  # pragma: no cover - exercised only if dep missing
+            raise RetrievalUnavailableError(
+                "sentence-transformers is not installed; cannot load dense embedding model"
+            ) from exc
+
+        try:
+            model = SentenceTransformer(model_name)
+        except Exception as exc:
+            raise RetrievalUnavailableError(
+                f"Could not load dense embedding model {model_name!r}: {exc}"
+            ) from exc
+
+        _DENSE_MODEL_CACHE[model_name] = model
+        return model
 
 
-def dense_embedding_text(
-    text: str,
-    *,
-    model_name: str = DEFAULT_DENSE_MODEL,
-    input_type: DenseInputType = "passage",
-) -> str:
-    """Apply model-specific dense embedding formatting."""
+def _load_sparse_model(model_name: str) -> Any:
+    with _SPARSE_MODEL_CACHE_LOCK:
+        cached = _SPARSE_MODEL_CACHE.get(model_name)
+        if cached is not None:
+            return cached
 
-    if not _uses_e5_prefixes(model_name):
-        return text
+        try:
+            from fastembed.sparse import SparseTextEmbedding
+        except ImportError as exc:  # pragma: no cover - exercised only if dep missing
+            raise RetrievalUnavailableError(
+                "fastembed is not installed; cannot load sparse embedding model"
+            ) from exc
 
-    stripped = text.lstrip()
-    if stripped.startswith(("query:", "passage:")):
-        return text
-    return f"{input_type}: {text}"
+        try:
+            model = SparseTextEmbedding(model_name=model_name, lazy_load=True)
+        except Exception as exc:
+            raise RetrievalUnavailableError(
+                f"Could not load sparse embedding model {model_name!r}: {exc}"
+            ) from exc
 
-
-@lru_cache(maxsize=4)
-def _dense_model(model_name: str, device: str) -> Any:
-    if model_name in SENTENCE_TRANSFORMER_DENSE_MODELS:
-        from sentence_transformers import SentenceTransformer
-
-        return SentenceTransformer(model_name, device=device)
-
-    from fastembed import TextEmbedding
-
-    return TextEmbedding(model_name=model_name, lazy_load=True)
-
-
-@lru_cache(maxsize=4)
-def _sparse_model(model_name: str) -> Any:
-    from fastembed.sparse import SparseTextEmbedding
-
-    return SparseTextEmbedding(model_name=model_name, lazy_load=True)
+        _SPARSE_MODEL_CACHE[model_name] = model
+        return model
 
 
 def _embed_dense(
     text: str,
     *,
     model_name: str = DEFAULT_DENSE_MODEL,
-    input_type: DenseInputType = "passage",
     device: str | None = None,
 ) -> list[float]:
-    """Embed text with the configured dense model."""
+    """Embed text with the real afro-xlmr model, L2-normalized for cosine search."""
 
-    formatted_text = dense_embedding_text(text, model_name=model_name, input_type=input_type)
     resolved_device = device or os.environ.get("EMBEDDING_DEVICE", DEFAULT_EMBEDDING_DEVICE)
-    model = _dense_model(model_name, resolved_device)
-    if hasattr(model, "encode"):
-        embedding = model.encode(formatted_text, normalize_embeddings=True)
-        return [float(value) for value in embedding.tolist()]
-    embedding = next(model.query_embed([formatted_text]))
-    return [float(value) for value in embedding.tolist()]
+    model = _load_dense_model(model_name)
+    vector = model.encode(
+        text,
+        convert_to_numpy=True,
+        normalize_embeddings=True,
+        device=resolved_device,
+    )
+    return [float(value) for value in vector]
 
 
 def embed_dense(
@@ -136,7 +159,7 @@ def embed_dense(
 ) -> list[float]:
     """Embed an ontology corpus chunk for dense retrieval."""
 
-    return _embed_dense(text, model_name=model_name, input_type="passage", device=device)
+    return _embed_dense(text, model_name=model_name, device=device)
 
 
 def embed_query_dense(
@@ -146,13 +169,28 @@ def embed_query_dense(
 ) -> list[float]:
     """Embed a user query for dense retrieval."""
 
-    return _embed_dense(text, model_name=model_name, input_type="query", device=device)
+    return _embed_dense(text, model_name=model_name, device=device)
+
+
+def dense_vector_size(model_name: str = DEFAULT_DENSE_MODEL) -> int:
+    """The embedding dimension of the loaded model — computed, never hardcoded."""
+
+    model = _load_dense_model(model_name)
+    size = model.get_embedding_dimension()
+    if size is None:  # pragma: no cover - defensive, SentenceTransformer always reports this
+        raise RetrievalUnavailableError(f"Could not determine embedding size for {model_name!r}")
+    return size
 
 
 def embed_sparse(text: str, model_name: str = DEFAULT_SPARSE_MODEL) -> SparseVector:
     """Embed text with FastEmbed's sparse model."""
 
-    embedding = next(_sparse_model(model_name).query_embed([text]))
+    try:
+        embedding = next(_load_sparse_model(model_name).query_embed([text]))
+    except RetrievalUnavailableError:
+        raise
+    except Exception as exc:
+        raise RetrievalUnavailableError(f"Sparse embedding model unavailable: {exc}") from exc
     return SparseVector(
         indices=[int(index) for index in embedding.indices.tolist()],
         values=[float(value) for value in embedding.values.tolist()],

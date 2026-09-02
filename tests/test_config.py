@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from config import Settings
+from config import DEFAULT_DENSE_MODEL, Settings
 
 
 def clear_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -33,7 +33,7 @@ def test_settings_load_valid_environment(monkeypatch: pytest.MonkeyPatch) -> Non
     assert settings.groq_api_key == "gsk_test_placeholder"
     assert settings.qdrant_url == "http://qdrant:6333"
     assert settings.qdrant_api_key == "test-qdrant-key"
-    assert settings.embedding_model_dense == "intfloat/multilingual-e5-small"
+    assert settings.embedding_model_dense == DEFAULT_DENSE_MODEL
     assert settings.embedding_device == "cpu"
     assert settings.retrieval_confidence_threshold == 0.42
 
