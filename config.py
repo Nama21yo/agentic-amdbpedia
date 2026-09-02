@@ -23,10 +23,14 @@ class Settings(BaseSettings):
         super().__init__(**values)
 
     groq_api_key: str = Field(alias="GROQ_API_KEY")
-    groq_model_fast: str = Field(default="llama-3.1-8b-instant", alias="GROQ_MODEL_FAST")
-    groq_model_reasoning: str = Field(
-        default="llama-3.3-70b-versatile", alias="GROQ_MODEL_REASONING"
-    )
+    # llama-3.1-8b-instant/llama-3.3-70b-versatile (the original defaults) were
+    # removed from Groq's model catalog at some point after this project was
+    # last run live -- confirmed directly: both now 400/401 on a real key.
+    # qwen/qwen3.8-27b is confirmed live (classify() JSON mode + full ReAct
+    # tool-calling) as of 2026-09-02; re-check Groq's current catalog
+    # (GET https://api.groq.com/openai/v1/models) if this goes stale again.
+    groq_model_fast: str = Field(default="qwen/qwen3.8-27b", alias="GROQ_MODEL_FAST")
+    groq_model_reasoning: str = Field(default="qwen/qwen3.8-27b", alias="GROQ_MODEL_REASONING")
     retrieval_confidence_threshold: float = Field(
         default=DEFAULT_RETRIEVAL_CONFIDENCE_THRESHOLD,
         ge=0.0,

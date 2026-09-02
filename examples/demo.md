@@ -244,8 +244,8 @@ must define these names:
 
 ~~~dotenv
 GROQ_API_KEY=...
-GROQ_MODEL_FAST=llama-3.1-8b-instant
-GROQ_MODEL_REASONING=llama-3.3-70b-versatile
+GROQ_MODEL_FAST=qwen/qwen3.8-27b
+GROQ_MODEL_REASONING=qwen/qwen3.8-27b
 RETRIEVAL_CONFIDENCE_THRESHOLD=0.35
 DATABASE_URL=postgresql+asyncpg://mapping_assistant:mapping_assistant@localhost:5435/mapping_assistant
 MEDIAWIKI_BASE_URL=https://mappings.dbpedia.org
@@ -875,6 +875,21 @@ Confirm Terminal 4 (`just run-http`) is actually running and
 `frontend/.env`'s `PUBLIC_CROSS_LINGUAL_URL` matches its port. The frontend
 fails closed into this message by design rather than crashing or showing
 fake data — that's not a bug to work around during recording.
+
+### The Groq calls fail with 401 or a model-not-found error
+
+Two distinct causes, both confirmed live while writing this runbook:
+
+- A `GROQ_API_KEY` already exported in your shell shadows `.env`'s value
+  (pydantic-settings prefers a real environment variable over `.env`). Run
+  `echo $GROQ_API_KEY` — if that's set and doesn't match `.env`, `unset
+  GROQ_API_KEY` before starting anything, or fix the shell export.
+- Groq's model catalog changes over time; a model name baked into `.env` can
+  simply stop existing. Check what your key can actually see:
+  `curl -s https://api.groq.com/openai/v1/models -H "Authorization: Bearer
+  $GROQ_API_KEY" | jq -r '.data[].id'`, and update `GROQ_MODEL_FAST`/
+  `GROQ_MODEL_REASONING` (and `config.py`'s defaults, if it's the shipped
+  default that's gone stale) to a model that's actually still there.
 
 ### Publish fails with a credentials error
 
