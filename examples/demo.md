@@ -793,8 +793,8 @@ Open mcp_server/consent.py and mcp_server/http_app.py's decide_review handler:
 
 ~~~python
 # consent.py
-def require_consent(approved: bool = False) -> Callable[[Callable[P, R]], Callable[P, R]]:
-    ...
+def require_consent(approved: bool = False) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
+
 
 # http_app.py, only reached when the review's own `publish: true` was set
 require_consent(approved=True)(publish_func)(template_name, domain_class, mappings)
