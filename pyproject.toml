@@ -20,6 +20,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "datasets>=5.0.1",
     "hypothesis>=6.135.0",
     "mypy>=1.16.0",
     "pre-commit>=4.2.0",
@@ -60,6 +61,8 @@ files = ["config.py", "errors.py", "logging_config.py", "rag", "mcp_server", "sc
 
 [[tool.mypy.overrides]]
 module = [
+    "datasets",
+    "datasets.*",
     "dspy",
     "dspy.*",
     "fastembed",
