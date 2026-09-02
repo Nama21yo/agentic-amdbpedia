@@ -82,20 +82,24 @@ export async function findSemanticMatch(
 	return res.json();
 }
 
-/** PLANNED: GET {AGENTIC_DBPEDIA_URL}/api/v2/agent/reviews — the Postgres-backed queue. */
+/**
+ * EXISTING: GET {CROSS_LINGUAL_URL}/v1/reviews — the Postgres-backed queue
+ * (mcp_server/http_app.py, refs implementation.md 14.1). Run it with
+ * `uvicorn mcp_server.http_app:app` alongside the MCP stdio server.
+ */
 export async function listReviewQueue(): Promise<ReviewItem[]> {
-	const res = await safeFetch(`${AGENTIC_DBPEDIA_URL}/api/v2/agent/reviews`);
+	const res = await safeFetch(`${CROSS_LINGUAL_URL}/v1/reviews`);
 	if (!res.ok) throw new BackendUnavailableError(`reviews failed: ${res.status}`);
 	return res.json();
 }
 
-/** PLANNED: POST {AGENTIC_DBPEDIA_URL}/api/v2/agent/reviews/{id}/decision */
+/** PLANNED: POST {CROSS_LINGUAL_URL}/v1/reviews/{id}/decision — arrives in 14.2. */
 export async function decideReview(
 	id: string,
 	decision: 'approved' | 'rejected',
 	reason?: string
 ): Promise<void> {
-	const res = await safeFetch(`${AGENTIC_DBPEDIA_URL}/api/v2/agent/reviews/${id}/decision`, {
+	const res = await safeFetch(`${CROSS_LINGUAL_URL}/v1/reviews/${id}/decision`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ decision, reason })

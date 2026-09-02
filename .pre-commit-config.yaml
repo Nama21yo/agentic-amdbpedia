@@ -13,7 +13,7 @@ repos:
         pass_filenames: false
       - id: mypy
         name: mypy strict
-        entry: uv run --frozen mypy config.py errors.py logging_config.py rag mcp_server scripts tests
+        entry: uv run --frozen mypy config.py errors.py logging_config.py db rag mcp_server scripts tests
         language: system
         pass_filenames: false
       - id: pytest-unit

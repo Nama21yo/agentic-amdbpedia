@@ -6,7 +6,7 @@ export UV_TOOL_DIR := env_var_or_default("UV_TOOL_DIR", ".uv-tools")
 lint:
     uvx ruff check .
     uvx ruff format --check .
-    uv run --frozen --python 3.11 mypy config.py errors.py logging_config.py rag mcp_server scripts tests
+    uv run --frozen --python 3.11 mypy config.py errors.py logging_config.py db rag mcp_server scripts tests
 
 test:
     uv run --frozen --python 3.11 pytest -m "not integration and not e2e and not perf"

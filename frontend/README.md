@@ -18,12 +18,13 @@ endpoints exist, every screen fails closed into a visible "not reachable
 yet" message instead of crashing or showing fake data — that's intentional,
 not a bug to fix later.
 
-| Screen                       | Calls                                                    | Status                                                                             |
-| ---------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Mapping Assistant (`/`)      | `agentic-dbpedia` `/api/v2/agent/preview` (SSE)          | Planned                                                                            |
-| Mapping Assistant chat panel | `cross-lingual` `/v1/find-semantic-match`                | Planned — cross-lingual is currently MCP-stdio only                                |
-| Review Queue (`/review`)     | `agentic-dbpedia` `/api/v2/agent/reviews[/:id/decision]` | Planned — needs the Postgres-backed queue                                          |
-| Coverage (`/coverage`)       | `agentic-dbpedia` `/api/statistics/summary`              | Backend route exists already; response shape not yet confirmed against this client |
+| Screen                       | Calls                                           | Status                                                                             |
+| ---------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Mapping Assistant (`/`)      | `agentic-dbpedia` `/api/v2/agent/preview` (SSE) | Planned                                                                            |
+| Mapping Assistant chat panel | `cross-lingual` `/v1/find-semantic-match`       | Planned — cross-lingual is currently MCP-stdio only                                |
+| Review Queue (`/review`)     | `cross-lingual` `GET /v1/reviews`               | **Exists** — `mcp_server/http_app.py`, refs implementation.md 14.1                 |
+| Review Queue (`/review`)     | `cross-lingual` `POST /v1/reviews/:id/decision` | Planned — arrives in implementation.md 14.2                                        |
+| Coverage (`/coverage`)       | `agentic-dbpedia` `/api/statistics/summary`     | Backend route exists already; response shape not yet confirmed against this client |
 
 ## Auth
 

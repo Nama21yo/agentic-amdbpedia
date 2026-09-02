@@ -8,6 +8,9 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_RETRIEVAL_CONFIDENCE_THRESHOLD = 0.35
+# A local SQLite file by default -- zero-config for local dev; the real
+# docker-compose Postgres service is opt-in via DATABASE_URL (refs 14.1).
+DEFAULT_DATABASE_URL = "sqlite+aiosqlite:///./data/review_queue.db"
 
 
 class Settings(BaseSettings):
@@ -29,3 +32,4 @@ class Settings(BaseSettings):
         le=1.0,
         alias="RETRIEVAL_CONFIDENCE_THRESHOLD",
     )
+    database_url: str = Field(default=DEFAULT_DATABASE_URL, alias="DATABASE_URL")

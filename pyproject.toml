@@ -5,6 +5,7 @@ description = "Amharic-to-English DBpedia ontology mapping assistant using hybri
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "asyncpg>=0.31.0",
     "dspy>=3.3.1",
     "fastembed>=0.7.0",
     "groq>=0.31.0",
@@ -15,12 +16,17 @@ dependencies = [
     "python-dotenv>=1.1.0",
     "rapidfuzz>=3.14.6",
     "sentence-transformers>=6.0.1",
+    "sqlalchemy[asyncio]>=2.0",
+    "starlette>=1.3.1",
     "torch>=2.2",
+    "uvicorn>=0.49.0",
 ]
 
 [dependency-groups]
 dev = [
+    "aiosqlite>=0.22.1",
     "datasets>=5.0.1",
+    "httpx>=0.28.1",
     "hypothesis>=6.135.0",
     "mypy>=1.16.0",
     "pre-commit>=4.2.0",
@@ -57,7 +63,7 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["config.py", "errors.py", "logging_config.py", "rag", "mcp_server", "scripts", "tests"]
+files = ["config.py", "errors.py", "logging_config.py", "db", "rag", "mcp_server", "scripts", "tests"]
 
 [[tool.mypy.overrides]]
 module = [

@@ -1,5 +1,6 @@
 # Changelog
 
+- `feat(review): Postgres-backed review queue schema and HTTP layer (refs 14.1)`
 - `chore(training): export script matching LLMIntegration's dataset format, verified via datasets.load_dataset (refs 13.2)`
 - `feat(training): append-only training-example log matching LLMIntegration's dspy.Example shape (refs 13.1)`
 - `chore(ops): schedule corpus refresh — just targets, daily ontology + 20min mappings cron doc (refs 12.2)`

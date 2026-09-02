@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mapping_assistant
+      POSTGRES_PASSWORD: mapping_assistant
+      POSTGRES_DB: mapping_assistant
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mapping_assistant -d mapping_assistant"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+
+volumes:
+  postgres_data:

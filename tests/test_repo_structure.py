@@ -8,10 +8,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 def test_scaffold_paths_exist() -> None:
     required_paths = [
         "README.md",
-        # docker-compose.yml removed with Qdrant (refs 10.4); returns when
-        # Postgres (M14) or Tentris (M15) need a service to run.
+        "docker-compose.yml",  # postgres (refs 14.1); returns Tentris in M15
         "pyproject.toml",
         "data",
+        "db/__init__.py",
+        "db/models.py",
+        "db/session.py",
         "rag/__init__.py",
         "rag/corpus.py",
         "rag/ontology.py",
@@ -19,6 +21,7 @@ def test_scaffold_paths_exist() -> None:
         "mcp_server/__init__.py",
         "mcp_server/server.py",
         "mcp_server/agent.py",
+        "mcp_server/http_app.py",
         "evaluation/test_queries.json",
         "evaluation/results.md",
         "examples/demo.md",
@@ -28,8 +31,10 @@ def test_scaffold_paths_exist() -> None:
 
 
 def test_packages_import() -> None:
+    import db
     import mcp_server
     import rag
 
     assert rag.__doc__
     assert mcp_server.__doc__
+    assert db.__doc__
