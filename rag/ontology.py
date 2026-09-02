@@ -33,6 +33,11 @@ class OntologyProperty:
     uri: str
     label: str
     property_type: str  # "ObjectProperty" | "DatatypeProperty" | "Property"
+    # rdfs:domain as declared on the property page, e.g. "Airport" — many real
+    # properties have none (reused across classes) or a broad domain like
+    # "owl:Thing"/"Place", so retrieval treats this as a soft ranking signal,
+    # never a hard filter (refs 10.3).
+    domain: str | None = None
 
     @property
     def search_text(self) -> str:
@@ -49,6 +54,7 @@ class DbpediaOntologyCatalog:
     """All DBpedia ontology properties, parsed from a cached wiki export."""
 
     LABEL_RE = re.compile(r"\{\{\s*label\s*\|\s*en\s*\|\s*([^}|]+)", re.IGNORECASE)
+    DOMAIN_RE = re.compile(r"\|\s*rdfs:domain\s*=\s*([^\n|}]+)", re.IGNORECASE)
     PREFIX_URIS = {
         "dbo": "http://dbpedia.org/ontology/",
         "foaf": "http://xmlns.com/foaf/0.1/",
@@ -109,6 +115,7 @@ class DbpediaOntologyCatalog:
         text = cls._first_text(page_el, "text") or ""
         label = cls._extract_english_label(text) or cls._humanize_property_name(local_name)
         property_type = cls._extract_property_type(text)
+        domain = cls._extract_domain(text)
 
         curie = local_name if ":" in local_name else f"dbo:{local_name}"
 
@@ -118,6 +125,7 @@ class DbpediaOntologyCatalog:
             uri=cls._property_uri(curie),
             label=label,
             property_type=property_type,
+            domain=domain,
         )
 
     @classmethod
@@ -134,6 +142,21 @@ class DbpediaOntologyCatalog:
         if re.search(r"\{\{\s*DatatypeProperty\b", text, flags=re.IGNORECASE):
             return "DatatypeProperty"
         return "Property"
+
+    @classmethod
+    def _extract_domain(cls, text: str) -> str | None:
+        match = cls.DOMAIN_RE.search(text)
+        if not match:
+            return None
+        value = match.group(1).strip()
+        if value.casefold() == "owl:thing":
+            # "applies to any class" carries no useful filtering signal.
+            return None
+        # Local class name only, matching how OntologyClass:/target_class values
+        # are already spelled elsewhere (e.g. "Airport", not "dbo:Airport").
+        if ":" in value:
+            value = value.split(":", 1)[1]
+        return value or None
 
     @staticmethod
     def _wiki_title_to_property_name(name: str) -> str:
@@ -234,6 +257,9 @@ class AmharicMappingIndex:
 
     def lookup(self, template_property: str) -> ExistingTemplateMapping | None:
         return self._mappings.get(self._normalize_template_property(template_property))
+
+    def all_mappings(self) -> tuple[ExistingTemplateMapping, ...]:
+        return tuple(self._mappings.values())
 
     @staticmethod
     def _clean_mapping_value(value: str) -> str:

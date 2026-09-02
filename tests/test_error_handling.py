@@ -68,16 +68,15 @@ def test_groq_down_raises_llm_unavailable_taxonomy() -> None:
 
 
 def test_retrieval_circuit_breaker_degrades_after_failure() -> None:
-    class BrokenClient:
-        def query_points(self, **_: Any) -> None:
-            raise OSError("qdrant down")
+    def broken_dense(_: str) -> list[float]:
+        raise OSError("embedding model unavailable")
 
     breaker = RetrievalCircuitBreaker(failure_threshold=1, reset_after_seconds=60)
     with pytest.raises(RetrievalUnavailableError):
         search(
             "አይካኦ_ኮድ",
-            client=BrokenClient(),
-            dense_embedder=lambda _: [0.0] * 16,
+            corpus=[],
+            dense_embedder=broken_dense,
             sparse_embedder=lexical_sparse_vector,
             confidence_threshold=0.1,
             circuit_breaker=breaker,
@@ -85,8 +84,8 @@ def test_retrieval_circuit_breaker_degrades_after_failure() -> None:
 
     degraded = search(
         "አይካኦ_ኮድ",
-        client=BrokenClient(),
-        dense_embedder=lambda _: [0.0] * 16,
+        corpus=[],
+        dense_embedder=broken_dense,
         sparse_embedder=lexical_sparse_vector,
         confidence_threshold=0.1,
         circuit_breaker=breaker,

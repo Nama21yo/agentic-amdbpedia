@@ -162,6 +162,35 @@ def embed_dense(
     return _embed_dense(text, model_name=model_name, device=device)
 
 
+def embed_dense_batch(
+    texts: list[str],
+    *,
+    model_name: str = DEFAULT_DENSE_MODEL,
+    device: str | None = None,
+) -> list[list[float]]:
+    """Embed many corpus chunks in one batched forward pass.
+
+    Building the retrieval index one document at a time (~2,948 real
+    ontology properties) via repeated single-text `encode()` calls is
+    dominated by Python/CPU-batch overhead, not model compute — batching
+    is an order of magnitude faster on CPU. Used by rag/retrieval.py's
+    build_index() for the production embedder path (refs 10.3).
+    """
+
+    if not texts:
+        return []
+    resolved_device = device or os.environ.get("EMBEDDING_DEVICE", DEFAULT_EMBEDDING_DEVICE)
+    model = _load_dense_model(model_name)
+    vectors = model.encode(
+        texts,
+        convert_to_numpy=True,
+        normalize_embeddings=True,
+        device=resolved_device,
+        batch_size=64,
+    )
+    return [[float(value) for value in vector] for vector in vectors]
+
+
 def embed_query_dense(
     text: str,
     model_name: str = DEFAULT_DENSE_MODEL,
@@ -195,6 +224,28 @@ def embed_sparse(text: str, model_name: str = DEFAULT_SPARSE_MODEL) -> SparseVec
         indices=[int(index) for index in embedding.indices.tolist()],
         values=[float(value) for value in embedding.values.tolist()],
     )
+
+
+def embed_sparse_batch(
+    texts: list[str], model_name: str = DEFAULT_SPARSE_MODEL
+) -> list[SparseVector]:
+    """Embed many texts with FastEmbed's sparse model in one batched call."""
+
+    if not texts:
+        return []
+    try:
+        embeddings = list(_load_sparse_model(model_name).passage_embed(texts))
+    except RetrievalUnavailableError:
+        raise
+    except Exception as exc:
+        raise RetrievalUnavailableError(f"Sparse embedding model unavailable: {exc}") from exc
+    return [
+        SparseVector(
+            indices=[int(index) for index in embedding.indices.tolist()],
+            values=[float(value) for value in embedding.values.tolist()],
+        )
+        for embedding in embeddings
+    ]
 
 
 def qdrant_sparse_vector(vector: SparseVector) -> Any:

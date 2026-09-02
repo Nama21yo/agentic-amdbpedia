@@ -40,6 +40,20 @@ def test_catalog_finds_an_object_property() -> None:
     assert prop.property_type == "ObjectProperty"
 
 
+def test_catalog_extracts_declared_domain() -> None:
+    catalog = DbpediaOntologyCatalog.from_default_cache()
+    icao = catalog.find("icaoLocationIdentifier")
+    assert icao is not None
+    assert icao.domain == "Airport"
+
+
+def test_catalog_domain_is_none_when_undeclared_or_owl_thing() -> None:
+    catalog = DbpediaOntologyCatalog.from_default_cache()
+    height = catalog.find("height")
+    assert height is not None
+    assert height.domain is None
+
+
 def test_catalog_lookup_is_case_and_prefix_insensitive() -> None:
     catalog = DbpediaOntologyCatalog.from_default_cache()
     assert catalog.find("Length") is catalog.find("dbo:length")

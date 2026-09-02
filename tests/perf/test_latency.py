@@ -7,37 +7,22 @@ from typing import Any
 import pytest
 
 from mcp_server.agent import ReasoningStep, ToolRequest, is_injection_attempt, run_mapping_agent
+from rag.corpus import RetrievalDocument
 from rag.embeddings import deterministic_dense_vector, lexical_sparse_vector
 from rag.retrieval import RetrievalResult, SearchResult, search
 
 pytestmark = pytest.mark.perf
 
-
-class FakeQueryResponse:
-    def __init__(self, points: list[Any]) -> None:
-        self.points = points
-
-
-class FakeScoredPoint:
-    def __init__(self, score: float, payload: dict[str, Any]) -> None:
-        self.score = score
-        self.payload = payload
-
-
-class FakeQdrantClient:
-    def query_points(self, **_: Any) -> FakeQueryResponse:
-        return FakeQueryResponse(
-            [
-                FakeScoredPoint(
-                    0.8,
-                    {
-                        "class": "Airport",
-                        "property": "icaoLocationIdentifier",
-                        "xsd_type": "xsd:string",
-                    },
-                )
-            ]
-        )
+ICAO_DOC = RetrievalDocument(
+    property="icaoLocationIdentifier",
+    curie="dbo:icaoLocationIdentifier",
+    uri="http://dbpedia.org/ontology/icaoLocationIdentifier",
+    label="icao location identifier",
+    property_type="DatatypeProperty",
+    domain="Airport",
+    amharic_aliases=("አይካኦ_ኮድ",),
+    english_aliases=("ICAO",),
+)
 
 
 class ScriptedGroq:
@@ -99,12 +84,12 @@ def _assert_budget(
     assert p95 < budget_seconds * 2
 
 
-def test_qdrant_hybrid_query_latency_budget(benchmark: Any) -> None:
+def test_in_process_hybrid_query_latency_budget(benchmark: Any) -> None:
     def operation() -> list[RetrievalResult]:
         results = search(
             "አይካኦ_ኮድ ICAO",
             target_class="Airport",
-            client=FakeQdrantClient(),
+            corpus=[ICAO_DOC],
             dense_embedder=lambda text: deterministic_dense_vector(text, size=16),
             sparse_embedder=lexical_sparse_vector,
             confidence_threshold=0.1,
@@ -113,7 +98,7 @@ def test_qdrant_hybrid_query_latency_budget(benchmark: Any) -> None:
         assert isinstance(results[0], SearchResult)
         return results
 
-    _assert_budget("qdrant_hybrid_query", operation, 0.2, benchmark)
+    _assert_budget("in_process_hybrid_query", operation, 0.2, benchmark)
 
 
 def test_fast_path_classification_latency_budget(benchmark: Any) -> None:

@@ -1,44 +1,47 @@
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
+from rag.corpus import RetrievalDocument
 from rag.embeddings import SparseVector, deterministic_dense_vector, lexical_sparse_vector
 from rag.retrieval import NoMatchFound, SearchResult, encode_query, search
 
+AIRPORT_ICAO = RetrievalDocument(
+    property="icaoLocationIdentifier",
+    curie="dbo:icaoLocationIdentifier",
+    uri="http://dbpedia.org/ontology/icaoLocationIdentifier",
+    label="icao location identifier",
+    property_type="DatatypeProperty",
+    domain="Airport",
+    amharic_aliases=("አይካኦ_ኮድ",),
+    english_aliases=("ICAO",),
+)
+DAM_ELEVATION = RetrievalDocument(
+    property="elevation",
+    curie="dbo:elevation",
+    uri="http://dbpedia.org/ontology/elevation",
+    label="elevation",
+    property_type="DatatypeProperty",
+    domain="Airport",
+    amharic_aliases=("ከፍታ",),
+    english_aliases=("airport elevation",),
+)
+DAM_OPENING_DATE = RetrievalDocument(
+    property="openingDate",
+    curie="dbo:openingDate",
+    uri="http://dbpedia.org/ontology/openingDate",
+    label="opening date",
+    property_type="DatatypeProperty",
+    domain="Dam",
+    amharic_aliases=("የመክፈቻ_ቀን", "የግድብ_መክፈቻ_ቀን"),
+    english_aliases=("opening date",),
+)
 
-class FakeQueryResponse:
-    def __init__(self, points: list[Any]) -> None:
-        self.points = points
+TEST_CORPUS = [AIRPORT_ICAO, DAM_ELEVATION, DAM_OPENING_DATE]
 
 
-class FakeScoredPoint:
-    def __init__(self, score: float, payload: dict[str, Any]) -> None:
-        self.score = score
-        self.payload = payload
-
-
-class FakeClient:
-    def __init__(self) -> None:
-        self.prefetch: list[Any] = []
-        self.query: Any = None
-
-    def query_points(self, **kwargs: Any) -> FakeQueryResponse:
-        self.prefetch = kwargs["prefetch"]
-        self.query = kwargs["query"]
-        return FakeQueryResponse(
-            [
-                FakeScoredPoint(
-                    0.8,
-                    {
-                        "class": "Airport",
-                        "property": "icaoLocationIdentifier",
-                        "xsd_type": "xsd:string",
-                    },
-                )
-            ]
-        )
+def _fake_dense(text: str) -> list[float]:
+    return deterministic_dense_vector(text, size=16)
 
 
 def test_encode_query_uses_supplied_shared_embedders() -> None:
@@ -61,24 +64,18 @@ def test_encode_query_uses_supplied_shared_embedders() -> None:
     assert calls == ["dense:አይካኦ_ኮድ", "sparse:አይካኦ_ኮድ"]
 
 
-def test_search_uses_qdrant_native_rrf_prefetch() -> None:
-    client = FakeClient()
-
+def test_search_finds_exact_alias_match_via_sparse_channel() -> None:
     results = search(
         "አይካኦ_ኮድ ICAO",
         target_class="Airport",
-        client=client,
-        dense_embedder=lambda text: deterministic_dense_vector(text, size=16),
+        corpus=TEST_CORPUS,
+        dense_embedder=_fake_dense,
         sparse_embedder=lexical_sparse_vector,
         confidence_threshold=0.1,
     )
 
     assert isinstance(results[0], SearchResult)
     assert results[0].property == "icaoLocationIdentifier"
-    assert len(client.prefetch) == 2
-    assert {prefetch.using for prefetch in client.prefetch} == {"dense", "sparse"}
-    assert client.query.__class__.__name__ == "FusionQuery"
-    assert str(client.query.fusion).lower().endswith("rrf")
 
 
 def test_search_with_custom_embedders_does_not_require_groq_key(
@@ -89,8 +86,8 @@ def test_search_with_custom_embedders_does_not_require_groq_key(
     results = search(
         "አይካኦ_ኮድ ICAO",
         target_class="Airport",
-        client=FakeClient(),
-        dense_embedder=lambda text: deterministic_dense_vector(text, size=16),
+        corpus=TEST_CORPUS,
+        dense_embedder=_fake_dense,
         sparse_embedder=lexical_sparse_vector,
         confidence_threshold=0.1,
     )
@@ -100,49 +97,26 @@ def test_search_with_custom_embedders_does_not_require_groq_key(
 
 
 def test_search_low_score_returns_no_match() -> None:
-    class LowScoreClient(FakeClient):
-        def query_points(self, **kwargs: Any) -> FakeQueryResponse:
-            self.prefetch = kwargs["prefetch"]
-            self.query = kwargs["query"]
-            return FakeQueryResponse(
-                [FakeScoredPoint(0.01, {"class": "Airport", "property": "alias"})]
-            )
-
     results = search(
-        "nonsense",
-        client=LowScoreClient(),
-        dense_embedder=lambda text: deterministic_dense_vector(text, size=16),
+        "totally unrelated nonsense phrase about volcanoes",
+        corpus=TEST_CORPUS,
+        dense_embedder=_fake_dense,
         sparse_embedder=lexical_sparse_vector,
         confidence_threshold=0.5,
     )
 
-    assert results == [NoMatchFound(query="nonsense")]
+    assert results == [NoMatchFound(query="totally unrelated nonsense phrase about volcanoes")]
 
 
 def test_search_single_channel_rrf_without_alias_evidence_returns_no_match() -> None:
-    class AmbiguousClient(FakeClient):
-        def query_points(self, **kwargs: Any) -> FakeQueryResponse:
-            self.prefetch = kwargs["prefetch"]
-            self.query = kwargs["query"]
-            return FakeQueryResponse(
-                [
-                    FakeScoredPoint(
-                        0.5,
-                        {
-                            "class": "Airport",
-                            "property": "elevation",
-                            "amharic_aliases": ["ከፍታ"],
-                            "english_aliases": ["airport elevation"],
-                        },
-                    )
-                ]
-            )
-
+    # "elevation" only matches lexically on generic filler tokens shared with
+    # the query, not on any curated alias, so the ambiguity guard must reject
+    # it even though it is the single top-ranked hit.
     results = search(
         "የቡና ጣዕም መለኪያ",
         target_class="Airport",
-        client=AmbiguousClient(),
-        dense_embedder=lambda text: deterministic_dense_vector(text, size=16),
+        corpus=TEST_CORPUS,
+        dense_embedder=_fake_dense,
         sparse_embedder=lexical_sparse_vector,
         confidence_threshold=0.35,
     )
@@ -151,32 +125,62 @@ def test_search_single_channel_rrf_without_alias_evidence_returns_no_match() -> 
 
 
 def test_search_single_channel_rrf_with_curated_alias_is_accepted() -> None:
-    class AliasMatchClient(FakeClient):
-        def query_points(self, **kwargs: Any) -> FakeQueryResponse:
-            self.prefetch = kwargs["prefetch"]
-            self.query = kwargs["query"]
-            return FakeQueryResponse(
-                [
-                    FakeScoredPoint(
-                        0.5,
-                        {
-                            "class": "Dam",
-                            "property": "openingDate",
-                            "amharic_aliases": ["የመክፈቻ_ቀን"],
-                            "english_aliases": ["opening date"],
-                        },
-                    )
-                ]
-            )
-
     results = search(
         "የግድብ_መክፈቻ_ቀን",
         target_class="Dam",
-        client=AliasMatchClient(),
-        dense_embedder=lambda text: deterministic_dense_vector(text, size=16),
+        corpus=TEST_CORPUS,
+        dense_embedder=_fake_dense,
         sparse_embedder=lexical_sparse_vector,
         confidence_threshold=0.35,
     )
 
     assert isinstance(results[0], SearchResult)
     assert results[0].property == "openingDate"
+
+
+def test_search_empty_query_returns_no_match() -> None:
+    results = search("   ", corpus=TEST_CORPUS, dense_embedder=_fake_dense)
+
+    assert results == [NoMatchFound(query="   ", reason="Empty query")]
+
+
+def test_search_target_class_breaks_ties_between_equally_ranked_documents() -> None:
+    # dense_only_match wins solely on the dense channel (rank #1, no lexical
+    # overlap with the query); sparse_only_match wins solely on the sparse
+    # channel (an exact alias match, but an unrelated dense embedding). Both
+    # therefore fuse to the same single-channel RRF score, 0.5 — a real tie
+    # that only target_class can break.
+    dense_only_match = RetrievalDocument(
+        property="propA",
+        curie="dbo:propA",
+        uri="http://dbpedia.org/ontology/propA",
+        label="unrelated label alpha",
+        property_type="DatatypeProperty",
+        domain="Airport",
+    )
+    sparse_only_match = RetrievalDocument(
+        property="propB",
+        curie="dbo:propB",
+        uri="http://dbpedia.org/ontology/propB",
+        label="unrelated label beta",
+        property_type="DatatypeProperty",
+        domain="Dam",
+        amharic_aliases=("የጋራ_ቃል",),
+    )
+
+    def dense_embedder(text: str) -> list[float]:
+        if text == "የጋራ_ቃል" or "alpha" in text:
+            return [1.0, 0.0]
+        return [0.0, 1.0]
+
+    results = search(
+        "የጋራ_ቃል",
+        target_class="Dam",
+        corpus=[dense_only_match, sparse_only_match],
+        dense_embedder=dense_embedder,
+        sparse_embedder=lexical_sparse_vector,
+        confidence_threshold=0.1,
+    )
+
+    assert isinstance(results[0], SearchResult)
+    assert results[0].property == "propB"
