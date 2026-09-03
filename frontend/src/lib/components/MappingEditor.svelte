@@ -13,11 +13,14 @@
 		TableRow
 	} from '$lib/components/ui/table/index.js';
 	import ConfidencePill from './ConfidencePill.svelte';
-	import SearchIcon from '@lucide/svelte/icons/search';
-	import Trash2Icon from '@lucide/svelte/icons/trash-2';
-	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
-	import PlusIcon from '@lucide/svelte/icons/plus';
-	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import Fa from 'svelte-fa';
+	import {
+		faMagnifyingGlass,
+		faTrash,
+		faRotateLeft,
+		faPlus,
+		faSpinner
+	} from '@fortawesome/free-solid-svg-icons';
 
 	let {
 		mappings = $bindable(),
@@ -163,7 +166,7 @@
 									onclick={() => openSuggest(index)}
 									title="Search real ontology candidates"
 								>
-									<SearchIcon class="size-3.5" />
+									<Fa icon={faMagnifyingGlass} class="size-3.5" />
 								</Button>
 							</div>
 							{#if isEdited(row)}
@@ -200,7 +203,7 @@
 										/>
 										<Button type="submit" size="sm" class="h-7" disabled={suggestLoading}>
 											{#if suggestLoading}
-												<LoaderCircleIcon class="size-3.5 animate-spin" />
+												<Fa icon={faSpinner} class="size-3.5 animate-spin" />
 											{:else}
 												Search
 											{/if}
@@ -244,7 +247,7 @@
 								onclick={() => removeRow(index)}
 								title="Remove this mapping"
 							>
-								<Trash2Icon class="size-3.5" />
+								<Fa icon={faTrash} class="size-3.5" />
 							</Button>
 						</TableCell>
 					{/if}
@@ -276,7 +279,7 @@
 							disabled={!newTemplateProperty.trim() || !newOntologyProperty.trim()}
 							onclick={addRow}
 						>
-							<PlusIcon class="size-3.5" />
+							<Fa icon={faPlus} class="size-3.5" />
 							Add
 						</Button>
 					</TableCell>
@@ -295,7 +298,7 @@
 				class="flex items-center gap-1 rounded-full border px-2 py-1 font-mono hover:border-foreground/40 hover:text-foreground"
 				onclick={() => restoreRow(row)}
 			>
-				<RotateCcwIcon class="size-3" />
+				<Fa icon={faRotateLeft} class="size-3" />
 				{row.templateProperty} to {row.ontologyProperty}
 			</button>
 		{/each}

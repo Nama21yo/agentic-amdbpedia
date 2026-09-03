@@ -1,17 +1,10 @@
 <script lang="ts">
-	import { toggleMode } from 'mode-watcher';
+	import { mode, toggleMode } from 'mode-watcher';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import SunIcon from '@lucide/svelte/icons/sun';
-	import MoonIcon from '@lucide/svelte/icons/moon';
+	import Fa from 'svelte-fa';
+	import { faSun, faMoon } from '@fortawesome/free-solid-svg-icons';
 </script>
 
-<Button
-	onclick={toggleMode}
-	variant="ghost"
-	size="icon"
-	class="relative size-8"
-	aria-label="Toggle theme"
->
-	<SunIcon class="size-4 scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
-	<MoonIcon class="absolute size-4 scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
+<Button onclick={toggleMode} variant="ghost" size="icon" class="size-8" aria-label="Toggle theme">
+	<Fa icon={mode.current === 'dark' ? faSun : faMoon} class="size-4" />
 </Button>

@@ -18,12 +18,15 @@
 	import MappingEditor from '$lib/components/MappingEditor.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { cn } from '$lib/utils.js';
-	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
-	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
-	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
-	import InboxIcon from '@lucide/svelte/icons/inbox';
-	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
-	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
+	import Fa from 'svelte-fa';
+	import {
+		faArrowsRotate,
+		faChevronRight,
+		faChevronDown,
+		faInbox,
+		faSpinner,
+		faTriangleExclamation
+	} from '@fortawesome/free-solid-svg-icons';
 
 	let items = $state<ReviewItem[]>([]);
 	let loading = $state(true);
@@ -155,154 +158,156 @@
 	];
 </script>
 
-<div class="mb-6 flex items-start justify-between gap-4">
-	<div>
-		<h1 class="text-2xl font-semibold tracking-tight">Review Queue</h1>
-		<p class="mt-1 text-sm text-muted-foreground">
-			Mapping-agent predictions wait here until a reviewer approves, corrects, or rejects them.
-			Nothing is written to the live wiki without explicit publish consent per item.
-		</p>
-	</div>
-	<Button variant="outline" size="sm" onclick={load} disabled={loading} class="shrink-0">
-		<RefreshCwIcon class={cn('size-3.5', loading && 'animate-spin')} />
-		Refresh
-	</Button>
-</div>
-
-<div class="mb-6 flex flex-wrap gap-1.5">
-	{#each filters as f (f.value)}
-		<Button
-			variant={filter === f.value ? 'default' : 'outline'}
-			size="sm"
-			class="h-7 rounded-full px-3"
-			onclick={() => (filter = f.value)}
-		>
-			{f.label}
-			<span class="tabular-nums opacity-70">
-				{f.value === 'all' ? items.length : (counts[f.value] ?? 0)}
-			</span>
+<div class="mx-auto h-full max-w-5xl overflow-y-auto px-4 py-6 md:px-8 md:py-10">
+	<div class="mb-6 flex items-start justify-between gap-4">
+		<div>
+			<h1 class="text-2xl font-semibold tracking-tight">Review Queue</h1>
+			<p class="mt-1 text-sm text-muted-foreground">
+				Mapping-agent predictions wait here until a reviewer approves, corrects, or rejects them.
+				Nothing is written to the live wiki without explicit publish consent per item.
+			</p>
+		</div>
+		<Button variant="outline" size="sm" onclick={load} disabled={loading} class="shrink-0">
+			<Fa icon={faArrowsRotate} class={cn('size-3.5', loading && 'animate-spin')} />
+			Refresh
 		</Button>
-	{/each}
-</div>
-
-{#if loading}
-	<div class="space-y-3">
-		<Skeleton class="h-20 w-full" />
-		<Skeleton class="h-20 w-full" />
-		<Skeleton class="h-20 w-full" />
 	</div>
-{:else if loadError}
-	<div
-		class="flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning-foreground"
-	>
-		<TriangleAlertIcon class="size-4 shrink-0" />
-		{loadError}
-	</div>
-{:else if visibleItems.length === 0}
-	<div
-		class="flex flex-col items-center gap-2 rounded-lg border border-dashed py-12 text-center text-sm text-muted-foreground"
-	>
-		<InboxIcon class="size-8 opacity-40" />
-		Nothing here right now.
-	</div>
-{:else}
-	<ul class="space-y-3">
-		{#each visibleItems as item (item.id)}
-			{@const isPending = item.status === 'pending_review'}
-			{@const isOpen = Boolean(expanded[item.id])}
-			<Card class="gap-0 overflow-hidden py-0">
-				<button
-					type="button"
-					class="flex w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-muted/40"
-					onclick={() => toggleExpanded(item)}
-				>
-					<div class="flex items-center gap-3">
-						<span class="text-muted-foreground">
-							{#if isOpen}
-								<ChevronDownIcon class="size-4" />
-							{:else}
-								<ChevronRightIcon class="size-4" />
-							{/if}
-						</span>
-						<div>
-							<p class="text-sm font-medium">{item.templateName}</p>
-							<p class="text-xs text-muted-foreground">
-								{item.domainClass} · {item.mappings.length} mapping{item.mappings.length === 1
-									? ''
-									: 's'} · {new Date(item.submittedAt).toLocaleString()}
-							</p>
-						</div>
-					</div>
-					<StatusBadge status={item.status} />
-				</button>
 
-				{#if isOpen}
-					<div class="border-t px-4 py-4">
-						{#if isPending && drafts[item.id]}
-							<MappingEditor
-								bind:mappings={drafts[item.id]}
-								original={item.mappings}
-								domainClass={item.domainClass}
-							/>
-						{:else}
-							<MappingEditor
-								mappings={item.mappings}
-								original={item.mappings}
-								domainClass={item.domainClass}
-								readonly
-							/>
-						{/if}
-
-						{#if isPending}
-							<div class="mt-4 flex flex-col gap-3">
-								<Textarea
-									bind:value={reasons[item.id]}
-									placeholder="Reason (optional) — recorded on the decision log either way"
-									rows={2}
-								/>
-
-								<Label class="items-start gap-2 text-xs font-normal text-muted-foreground">
-									<Checkbox bind:checked={publishFlags[item.id]} class="mt-0.5" />
-									<span>
-										Also publish to the live wiki on approval
-										<span class="text-muted-foreground/70"
-											>— a real, outward-facing edit to mappings.dbpedia.org; you'll be asked to
-											confirm.</span
-										>
-									</span>
-								</Label>
-
-								<div class="flex justify-end gap-2">
-									<Button
-										variant="outline"
-										class="border-destructive/40 text-destructive hover:bg-destructive/10"
-										onclick={() => submit(item, 'rejected')}
-										disabled={submitting[item.id]}
-									>
-										{#if submitting[item.id]}
-											<LoaderCircleIcon class="animate-spin" />
-										{/if}
-										Reject
-									</Button>
-									<Button onclick={() => onApproveClick(item)} disabled={submitting[item.id]}>
-										{#if submitting[item.id]}
-											<LoaderCircleIcon class="animate-spin" />
-											Working…
-										{:else if publishFlags[item.id]}
-											Approve & publish…
-										{:else}
-											Approve
-										{/if}
-									</Button>
-								</div>
-							</div>
-						{/if}
-					</div>
-				{/if}
-			</Card>
+	<div class="mb-6 flex flex-wrap gap-1.5">
+		{#each filters as f (f.value)}
+			<Button
+				variant={filter === f.value ? 'default' : 'outline'}
+				size="sm"
+				class="h-7 rounded-full px-3"
+				onclick={() => (filter = f.value)}
+			>
+				{f.label}
+				<span class="tabular-nums opacity-70">
+					{f.value === 'all' ? items.length : (counts[f.value] ?? 0)}
+				</span>
+			</Button>
 		{/each}
-	</ul>
-{/if}
+	</div>
+
+	{#if loading}
+		<div class="space-y-3">
+			<Skeleton class="h-20 w-full" />
+			<Skeleton class="h-20 w-full" />
+			<Skeleton class="h-20 w-full" />
+		</div>
+	{:else if loadError}
+		<div
+			class="flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning-foreground"
+		>
+			<Fa icon={faTriangleExclamation} class="size-4 shrink-0" />
+			{loadError}
+		</div>
+	{:else if visibleItems.length === 0}
+		<div
+			class="flex flex-col items-center gap-2 rounded-lg border border-dashed py-12 text-center text-sm text-muted-foreground"
+		>
+			<Fa icon={faInbox} class="size-8 opacity-40" />
+			Nothing here right now.
+		</div>
+	{:else}
+		<ul class="space-y-3">
+			{#each visibleItems as item (item.id)}
+				{@const isPending = item.status === 'pending_review'}
+				{@const isOpen = Boolean(expanded[item.id])}
+				<Card class="gap-0 overflow-hidden py-0">
+					<button
+						type="button"
+						class="flex w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-muted/40"
+						onclick={() => toggleExpanded(item)}
+					>
+						<div class="flex items-center gap-3">
+							<span class="text-muted-foreground">
+								{#if isOpen}
+									<Fa icon={faChevronDown} class="size-3.5" />
+								{:else}
+									<Fa icon={faChevronRight} class="size-3.5" />
+								{/if}
+							</span>
+							<div>
+								<p class="text-sm font-medium">{item.templateName}</p>
+								<p class="text-xs text-muted-foreground">
+									{item.domainClass} · {item.mappings.length} mapping{item.mappings.length === 1
+										? ''
+										: 's'} · {new Date(item.submittedAt).toLocaleString()}
+								</p>
+							</div>
+						</div>
+						<StatusBadge status={item.status} />
+					</button>
+
+					{#if isOpen}
+						<div class="border-t px-4 py-4">
+							{#if isPending && drafts[item.id]}
+								<MappingEditor
+									bind:mappings={drafts[item.id]}
+									original={item.mappings}
+									domainClass={item.domainClass}
+								/>
+							{:else}
+								<MappingEditor
+									mappings={item.mappings}
+									original={item.mappings}
+									domainClass={item.domainClass}
+									readonly
+								/>
+							{/if}
+
+							{#if isPending}
+								<div class="mt-4 flex flex-col gap-3">
+									<Textarea
+										bind:value={reasons[item.id]}
+										placeholder="Reason (optional) — recorded on the decision log either way"
+										rows={2}
+									/>
+
+									<Label class="items-start gap-2 text-xs font-normal text-muted-foreground">
+										<Checkbox bind:checked={publishFlags[item.id]} class="mt-0.5" />
+										<span>
+											Also publish to the live wiki on approval
+											<span class="text-muted-foreground/70"
+												>— a real, outward-facing edit to mappings.dbpedia.org; you'll be asked to
+												confirm.</span
+											>
+										</span>
+									</Label>
+
+									<div class="flex justify-end gap-2">
+										<Button
+											variant="outline"
+											class="border-destructive/40 text-destructive hover:bg-destructive/10"
+											onclick={() => submit(item, 'rejected')}
+											disabled={submitting[item.id]}
+										>
+											{#if submitting[item.id]}
+												<Fa icon={faSpinner} class="size-3.5 animate-spin" />
+											{/if}
+											Reject
+										</Button>
+										<Button onclick={() => onApproveClick(item)} disabled={submitting[item.id]}>
+											{#if submitting[item.id]}
+												<Fa icon={faSpinner} class="size-3.5 animate-spin" />
+												Working…
+											{:else if publishFlags[item.id]}
+												Approve & publish…
+											{:else}
+												Approve
+											{/if}
+										</Button>
+									</div>
+								</div>
+							{/if}
+						</div>
+					{/if}
+				</Card>
+			{/each}
+		</ul>
+	{/if}
+</div>
 
 {#each items as item (item.id)}
 	<AlertDialog.Root
@@ -340,7 +345,7 @@
 					}}
 				>
 					{#if submitting[item.id]}
-						<LoaderCircleIcon class="animate-spin" />
+						<Fa icon={faSpinner} class="size-3.5 animate-spin" />
 					{/if}
 					Publish
 				</AlertDialog.Action>

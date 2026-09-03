@@ -1,13 +1,7 @@
-# agentic-amdbpedia frontend (starter)
+# agentic-amdbpedia frontend
 
-The web UI for the "prepare a mapping for this infobox" workflow: SvelteKit 5
-
-- TypeScript + Tailwind v4, scaffolded with `sv create` and installed with
-  pnpm. Not built from, but structurally _and visually_ inspired by
-  `vercel/ai-chatbot-svelte` — its streaming-chat shape and shadcn-svelte
-  design language, without the Vercel-specific pieces (Postgres/Neon chat
-  history, Blob storage, provider-routed AI SDK calls, auth) that don't
-  apply here.
+The web UI for the Amharic infobox → DBpedia mapping workflow: SvelteKit 5,
+TypeScript, Tailwind v4, scaffolded with `sv create` and installed with pnpm.
 
 ## What's real vs. planned
 
@@ -24,13 +18,24 @@ DEF-extraction-output crawl. A screen whose endpoint isn't reachable fails
 closed into a visible "not reachable yet" message instead of crashing or
 showing fake data — that's intentional, not a bug to fix later.
 
-| Screen                       | Calls                                           | Status                                                                       |
-| ---------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------- |
-| Mapping Assistant (`/`)      | `cross-lingual` `POST /v1/preview` (SSE)        | **Exists** — `mcp_server/http_app.py`, refs implementation.md 16.3           |
-| Mapping Assistant chat panel | `cross-lingual` `/v1/find-semantic-match`       | **Exists** — refs implementation.md 16.3                                     |
-| Review Queue (`/review`)     | `cross-lingual` `GET /v1/reviews`               | **Exists** — `mcp_server/http_app.py`, refs implementation.md 14.1           |
-| Review Queue (`/review`)     | `cross-lingual` `POST /v1/reviews/:id/decision` | **Exists** — refs implementation.md 14.2/14.3 (correction + publish support) |
-| Coverage (`/coverage`)       | `cross-lingual` `GET /v1/coverage`              | **Exists** — `mcp_server/http_app.py` + `db/session.py::coverage_stats`      |
+| Screen                   | Calls                                           | Status                                                                       |
+| ------------------------ | ----------------------------------------------- | ---------------------------------------------------------------------------- |
+| Chat (`/`)               | `cross-lingual` `POST /v1/preview` (SSE)        | **Exists** — `mcp_server/http_app.py`, refs implementation.md 16.3           |
+| Chat (`/`)               | `cross-lingual` `POST /v1/find-semantic-match`  | **Exists** — refs implementation.md 16.3                                     |
+| Review Queue (`/review`) | `cross-lingual` `GET /v1/reviews`               | **Exists** — `mcp_server/http_app.py`, refs implementation.md 14.1           |
+| Review Queue (`/review`) | `cross-lingual` `POST /v1/reviews/:id/decision` | **Exists** — refs implementation.md 14.2/14.3 (correction + publish support) |
+| Coverage (`/coverage`)   | `cross-lingual` `GET /v1/coverage`              | **Exists** — `mcp_server/http_app.py` + `db/session.py::coverage_stats`      |
+
+## Chat (`/`)
+
+One conversation, one input — pasting an infobox and asking about a single
+field are the same box, not two separate panels. Input starting with
+`{{Infobox` (case-insensitive) runs the full extract → predict → format →
+persist pipeline over SSE, streaming each node's progress inline as part of
+the assistant's turn; anything else runs a quick grounded lookup
+(`find_semantic_match`) instead. Every pipeline run also lands in the
+Review Queue regardless of what's shown here — this page is a preview, not
+the approval step.
 
 ## Human-in-the-loop review
 
@@ -43,10 +48,10 @@ mapping agent's predictions, not just accepts or rejects them blindly:
   -highlighted against the model's original prediction, with a one-click
   reset back to it.
 - Each row has a **suggest** panel that calls the same
-  `find_semantic_match` retrieval endpoint the chat panel uses, so a
-  correction is picked from real grounded candidates instead of freehand
-  -typed (and possibly misspelled) — consistent with the rest of this
-  project's "never let free text stand in for retrieval" stance.
+  `find_semantic_match` retrieval endpoint the chat uses, so a correction
+  is picked from real grounded candidates instead of freehand-typed (and
+  possibly misspelled) — consistent with the rest of this project's "never
+  let free text stand in for retrieval" stance.
 - A row a reviewer edits is treated as human-confirmed (`confidence` snaps
   to 100%); the backend logs `was_correction: true` for it in the training
   log whenever the final `ontologyProperty` differs from what the model
@@ -67,18 +72,21 @@ or real auth once that becomes a problem, not before.
 
 ## Component library
 
-Uses the same stack `ai-chatbot-svelte` does: **shadcn-svelte** primitives
-(`src/lib/components/ui/*` — button, input, textarea, label, card, badge,
-table, checkbox, separator, tooltip, alert-dialog, skeleton, sonner) built
-on **Bits UI**, styled with Tailwind v4's CSS-variable theme
-(`src/routes/layout.css`, "new-york" style, neutral base color) plus
-**`mode-watcher`** for a real light/dark toggle and **`@lucide/svelte`**
-for icons. The shadcn-svelte CLI's newer `init` flow requires an
-interactive TTY to pick a design-system preset (confirmed: piped stdin is
-ignored outright, so it can't be scripted) — these files were hand-authored
-to match its actual generated output instead of fought into working
-non-interactively; `pnpm dlx shadcn-svelte@latest add <name>` should still
-work against `components.json` for adding more.
+**shadcn-svelte** primitives (`src/lib/components/ui/*` — button, input,
+textarea, label, card, badge, table, checkbox, separator, tooltip,
+alert-dialog, skeleton, sonner) built on **Bits UI**, styled with Tailwind
+v4's CSS-variable theme (`src/routes/layout.css`, "new-york" style, a
+warm neutral palette with its own accent color, tuned for both light and
+dark) plus **`mode-watcher`** for a real light/dark toggle and
+**Font Awesome** (`svelte-fa` + `@fortawesome/free-solid-svg-icons`) for
+icons — kept to the small set that actually clarifies a control's purpose
+(search, remove, restore, add, spinner, status, nav), not decorative ones.
+The shadcn-svelte CLI's newer `init` flow requires an interactive TTY to
+pick a design-system preset (confirmed: piped stdin is ignored outright,
+so it can't be scripted) — these files were hand-authored to match its
+actual generated output instead of fought into working non-interactively;
+`pnpm dlx shadcn-svelte@latest add <name>` should still work against
+`components.json` for adding more.
 
 App-specific composites live one level up in `src/lib/components/`
 (`AppSidebar`, `ModeToggle`, `StatusBadge`, `ConfidencePill`, `StepTracker`,

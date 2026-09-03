@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Checkbox as CheckboxPrimitive } from 'bits-ui';
-	import CheckIcon from '@lucide/svelte/icons/check';
+	import Fa from 'svelte-fa';
+	import { faCheck } from '@fortawesome/free-solid-svg-icons';
 	import { cn } from '$lib/utils.js';
 
 	let {
@@ -31,7 +32,7 @@
 			{#if indeterminate}
 				<div class="h-0.5 w-2 rounded-sm bg-current"></div>
 			{:else}
-				<CheckIcon class={cn('size-3.5', !checked && 'text-transparent')} />
+				<Fa icon={faCheck} class={cn('size-3', !checked && 'text-transparent')} />
 			{/if}
 		</div>
 	{/snippet}

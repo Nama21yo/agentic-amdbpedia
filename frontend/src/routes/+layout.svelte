@@ -6,24 +6,25 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import AppSidebar from '$lib/components/AppSidebar.svelte';
 	import ModeToggle from '$lib/components/ModeToggle.svelte';
-	import MenuIcon from '@lucide/svelte/icons/menu';
+	import Fa from 'svelte-fa';
+	import { faBars } from '@fortawesome/free-solid-svg-icons';
 
 	let { children } = $props();
 
 	let sidebarOpen = $state(false);
 </script>
 
-<svelte:head><link rel="icon" href={favicon} /></svelte:head>
+<svelte:head><title>agentic-amdbpedia</title><link rel="icon" href={favicon} /></svelte:head>
 
 <ModeWatcher />
 <Toaster richColors position="top-center" />
 
-<div class="flex min-h-svh">
+<div class="flex h-svh overflow-hidden">
 	<AppSidebar bind:open={sidebarOpen} />
 
-	<div class="flex min-w-0 flex-1 flex-col">
+	<div class="flex min-h-0 min-w-0 flex-1 flex-col">
 		<header
-			class="sticky top-0 z-20 flex items-center gap-2 border-b bg-background/80 px-3 py-2 backdrop-blur md:px-6"
+			class="flex shrink-0 items-center gap-2 border-b px-3 py-2 md:justify-end md:border-0 md:px-4 md:py-3"
 		>
 			<Button
 				variant="ghost"
@@ -32,12 +33,13 @@
 				onclick={() => (sidebarOpen = !sidebarOpen)}
 				aria-label="Toggle sidebar"
 			>
-				<MenuIcon class="size-4" />
+				<Fa icon={faBars} class="size-4" />
 			</Button>
-			<div class="flex-1"></div>
+			<span class="text-sm font-semibold md:hidden">agentic-amdbpedia</span>
+			<div class="flex-1 md:hidden"></div>
 			<ModeToggle />
 		</header>
-		<main class="mx-auto w-full max-w-5xl flex-1 px-4 py-6 md:px-8 md:py-10">
+		<main class="min-h-0 flex-1 overflow-hidden">
 			{@render children()}
 		</main>
 	</div>
