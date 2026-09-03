@@ -56,13 +56,16 @@ describe('mutating a turn after push (reproducing "chat doesn\'t show the reply"
 			expect(screen.getByText('length')).toBeInTheDocument();
 		});
 
-		// The backend always computes real mapping wikitext alongside
-		// `mappings` (mcp_server/pipeline.py's format_mapping_syntax node) --
-		// confirmed live that it never reached the UI at all before this was
-		// wired up (SSE event -> PipelineTurn -> template all dropped it).
+		// The backend always computes real mapping wikitext AND XML
+		// alongside `mappings` (mcp_server/pipeline.py's
+		// format_mapping_syntax node) -- confirmed live that neither ever
+		// reached the UI at all before this was wired up (SSE event ->
+		// PipelineTurn -> template both dropped it).
 		await waitFor(() => {
 			expect(screen.getByText('View mapping wikitext')).toBeInTheDocument();
 			expect(screen.getByText(/mapToClass = Bridge/)).toBeInTheDocument();
+			expect(screen.getByText('View mapping XML')).toBeInTheDocument();
+			expect(screen.getByText(/<TemplateMapping/)).toBeInTheDocument();
 		});
 	});
 });
