@@ -114,27 +114,41 @@
 
 	async function submit(item: ReviewItem, decision: 'approved' | 'rejected') {
 		submitting[item.id] = true;
-		try {
-			const draft = drafts[item.id];
-			const corrected = draft && mappingsDiffer(draft, item.mappings) ? draft : undefined;
-			const updated = await decideReview(item.id, decision, {
-				reason: reasons[item.id]?.trim() || undefined,
-				correctedMappings: corrected,
-				publish: decision === 'approved' && Boolean(publishFlags[item.id])
-			});
-			applyServerState(updated);
-			toast.success(
-				updated.status === 'published'
+		const draft = drafts[item.id];
+		const corrected = draft && mappingsDiffer(draft, item.mappings) ? draft : undefined;
+		const wantsPublish = decision === 'approved' && Boolean(publishFlags[item.id]);
+
+		const request = decideReview(item.id, decision, {
+			reason: reasons[item.id]?.trim() || undefined,
+			correctedMappings: corrected,
+			publish: wantsPublish
+		});
+
+		toast.promise(request, {
+			loading: wantsPublish
+				? `Publishing ${item.templateName}…`
+				: decision === 'approved'
+					? `Approving ${item.templateName}…`
+					: `Rejecting ${item.templateName}…`,
+			success: (updated) => {
+				applyServerState(updated);
+				return updated.status === 'published'
 					? `Published ${updated.templateName} to the live wiki.`
-					: `Marked ${updated.templateName} as ${updated.status.replace('_', ' ')}.`
-			);
-		} catch (err) {
-			if (err instanceof DecisionFailedError) {
-				if (err.review) applyServerState(err.review);
-				toast.error(`Publish failed: ${err.message}`);
-			} else {
-				toast.error('Could not record that decision — backend not reachable.');
+					: `Marked ${updated.templateName} as ${updated.status.replace('_', ' ')}.`;
+			},
+			error: (err) => {
+				if (err instanceof DecisionFailedError) {
+					if (err.review) applyServerState(err.review);
+					return `Publish failed: ${err.message}`;
+				}
+				return 'Could not record that decision — backend not reachable.';
 			}
+		});
+
+		try {
+			await request;
+		} catch {
+			// already surfaced via the toast.promise error callback above
 		} finally {
 			submitting[item.id] = false;
 			confirmPublishFor = null;

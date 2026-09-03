@@ -1,7 +1,13 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { BackendUnavailableError, findSemanticMatch, previewMapping } from '$lib/api';
-	import { chatReset } from '$lib/chat.svelte';
+	import {
+		type PipelineTurn,
+		type AnswerTurn,
+		currentSession,
+		ensureActiveSession,
+		touchSession
+	} from '$lib/chat.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
@@ -15,49 +21,17 @@
 	} from '$lib/components/ui/table/index.js';
 	import ConfidencePill from '$lib/components/ConfidencePill.svelte';
 	import StepTracker from '$lib/components/StepTracker.svelte';
+	import ThinkingIndicator from '$lib/components/ThinkingIndicator.svelte';
+	import logo from '$lib/assets/dbpedia-am-logo.png';
 	import Fa from 'svelte-fa';
 	import { faArrowUp, faArrowRight, faCircleCheck } from '@fortawesome/free-solid-svg-icons';
-	import type { AgentStep, MappingCandidate, PredictedMapping } from '$lib/types';
 
-	interface PipelineTurn {
-		id: string;
-		kind: 'pipeline';
-		input: string;
-		targetClass?: string;
-		steps: AgentStep[];
-		mappings: PredictedMapping[] | null;
-		running: boolean;
-		error?: string;
-	}
-
-	interface AnswerTurn {
-		id: string;
-		kind: 'answer';
-		input: string;
-		targetClass?: string;
-		matches: MappingCandidate[] | null;
-		noMatch: boolean;
-		running: boolean;
-		error?: string;
-	}
-
-	type Turn = PipelineTurn | AnswerTurn;
-
-	let turns = $state<Turn[]>([]);
 	let input = $state('');
 	let targetClass = $state('');
 	let busy = $state(false);
 	let scrollAnchor: HTMLDivElement | undefined = $state();
 
-	let lastResetToken = chatReset.token;
-	$effect(() => {
-		if (chatReset.token !== lastResetToken) {
-			lastResetToken = chatReset.token;
-			turns = [];
-			input = '';
-			targetClass = '';
-		}
-	});
+	const turns = $derived(currentSession()?.turns ?? []);
 
 	function looksLikeInfobox(text: string): boolean {
 		return /\{\{\s*infobox/i.test(text) || text.trim().startsWith('{{');
@@ -72,6 +46,8 @@
 		if (!value || busy) return;
 		input = '';
 		busy = true;
+
+		const session = ensureActiveSession();
 		const id = crypto.randomUUID();
 		const wantsClass = targetClass.trim() || undefined;
 
@@ -85,7 +61,8 @@
 				mappings: null,
 				running: true
 			};
-			turns = [...turns, turn];
+			session.turns.push(turn);
+			touchSession(session.id);
 			scrollToBottom();
 			try {
 				for await (const event of previewMapping(value, wantsClass)) {
@@ -104,6 +81,7 @@
 						: `Unexpected error: ${err instanceof Error ? err.message : String(err)}`;
 			} finally {
 				turn.running = false;
+				touchSession(session.id);
 			}
 		} else {
 			const turn: AnswerTurn = {
@@ -115,7 +93,8 @@
 				noMatch: false,
 				running: true
 			};
-			turns = [...turns, turn];
+			session.turns.push(turn);
+			touchSession(session.id);
 			scrollToBottom();
 			try {
 				const result = await findSemanticMatch(value, wantsClass);
@@ -132,6 +111,7 @@
 						: `Unexpected error: ${err instanceof Error ? err.message : String(err)}`;
 			} finally {
 				turn.running = false;
+				touchSession(session.id);
 			}
 		}
 
@@ -159,6 +139,7 @@
 	<div class="flex-1 overflow-y-auto px-4 py-6 md:px-8">
 		{#if turns.length === 0}
 			<div class="flex h-full flex-col items-center justify-center gap-6 text-center">
+				<img src={logo} alt="Amharic DBpedia" class="size-16 object-contain" />
 				<div>
 					<h1 class="text-2xl font-semibold tracking-tight">Amharic → DBpedia Mapping Assistant</h1>
 					<p class="mt-2 text-sm text-muted-foreground">
@@ -198,6 +179,9 @@
 
 					<div class="flex flex-col gap-3">
 						{#if turn.kind === 'pipeline'}
+							{#if turn.running && turn.steps.length === 0}
+								<ThinkingIndicator label="Extracting and predicting" />
+							{/if}
 							<StepTracker steps={turn.steps} />
 							{#if turn.mappings && turn.mappings.length > 0}
 								<div class="overflow-hidden rounded-lg border">
@@ -235,7 +219,7 @@
 							{/if}
 						{:else if turn.kind === 'answer'}
 							{#if turn.running}
-								<p class="text-sm text-muted-foreground">Searching…</p>
+								<ThinkingIndicator label="Searching the ontology" />
 							{:else if turn.noMatch}
 								<p class="text-sm">No confident match found in the ontology for that term.</p>
 							{:else if turn.matches}
