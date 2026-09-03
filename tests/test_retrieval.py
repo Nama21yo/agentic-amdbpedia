@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
+import rag.retrieval as retrieval
 from rag.corpus import RetrievalDocument
 from rag.embeddings import SparseVector, deterministic_dense_vector, lexical_sparse_vector
 from rag.retrieval import NoMatchFound, SearchResult, encode_query, search
@@ -184,3 +187,49 @@ def test_search_target_class_breaks_ties_between_equally_ranked_documents() -> N
 
     assert isinstance(results[0], SearchResult)
     assert results[0].property == "propB"
+
+
+def test_index_disk_cache_roundtrips_and_is_fingerprint_scoped(tmp_path: Path, monkeypatch):
+    """build_index() re-embedding the whole ~2,948-property ontology corpus
+    from scratch on every process start took 10+ minutes on a CPU-only
+    embedder (confirmed live) -- the disk cache in rag/retrieval.py exists
+    specifically to make every restart after the first one fast. Exercises
+    the cache functions directly (not through the real embedder, which
+    would need a live network + model download) but with the exact same
+    fingerprint/save/load path build_index() itself calls."""
+
+    monkeypatch.setattr(retrieval, "_INDEX_CACHE_DIR", tmp_path)
+
+    fingerprint = retrieval._corpus_fingerprint(["hello", "world"])
+    assert retrieval._load_cached_vectors(fingerprint) is None  # nothing cached yet
+
+    dense_vectors = [[0.1, 0.2], [0.3, 0.4]]
+    sparse_vectors = [
+        SparseVector(indices=[1, 2], values=[0.5, 0.5]),
+        SparseVector(indices=[3], values=[1.0]),
+    ]
+    retrieval._save_cached_vectors(fingerprint, dense_vectors, sparse_vectors)
+
+    loaded = retrieval._load_cached_vectors(fingerprint)
+    assert loaded == (dense_vectors, sparse_vectors)
+
+    # A different corpus -- e.g. after `refresh-ontology`/`refresh-mappings`
+    # actually changes the published mappings -- must never serve stale
+    # vectors for content that was never embedded.
+    other_fingerprint = retrieval._corpus_fingerprint(["hello", "different"])
+    assert retrieval._load_cached_vectors(other_fingerprint) is None
+
+
+def test_index_disk_cache_survives_a_corrupt_file(tmp_path: Path, monkeypatch):
+    """A cache file from an old format, or truncated by a killed process
+    mid-write, must degrade to "rebuild the index" -- never crash the
+    server that would otherwise be serving real requests."""
+
+    monkeypatch.setattr(retrieval, "_INDEX_CACHE_DIR", tmp_path)
+
+    fingerprint = retrieval._corpus_fingerprint(["hello"])
+    cache_path = retrieval._index_cache_path(fingerprint)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_bytes(b"not a valid pickle")
+
+    assert retrieval._load_cached_vectors(fingerprint) is None

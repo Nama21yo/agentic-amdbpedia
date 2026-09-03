@@ -161,12 +161,31 @@ def _build_dspy_program() -> DspyProgram:
     return SelectFromCandidates(dspy.Predict(PropertyMappingMC))
 
 
+# dspy.LM defaults to num_retries=3 with no timeout, which means a
+# genuinely down local Ollama (the common case in dev/CI, where nothing
+# is listening on :11434) can burn tens of seconds retrying a doomed
+# connection before predict_property() ever gets to fall back to the
+# retriever's own top-1 result. A short, explicit timeout with no retries
+# makes that fallback fast instead of merely eventual -- an LLM that's
+# actually up and reachable still comes back well inside 3s in practice;
+# one that isn't now fails in ~3s flat instead of ~3 retries' worth of
+# backoff, and the caller's own RetrievalCircuitBreaker still absorbs
+# repeated failures across calls on top of this.
+LLM_CALL_TIMEOUT_SECONDS = 3.0
+
+
 def _call_dspy(
     program: DspyProgram, amharic_property: str, candidates: list[str], model_alias: str
 ) -> str:
     import dspy
 
-    lm = dspy.LM(resolve_model(model_alias), temperature=0.0, max_tokens=256)
+    lm = dspy.LM(
+        resolve_model(model_alias),
+        temperature=0.0,
+        max_tokens=256,
+        num_retries=0,
+        timeout=LLM_CALL_TIMEOUT_SECONDS,
+    )
     with dspy.context(lm=lm):
         prediction = program(premise=amharic_property, candidates="; ".join(candidates))
     return prediction.property_class

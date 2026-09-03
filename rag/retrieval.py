@@ -12,18 +12,23 @@ scores `1 / (1 + 1) = 0.5`, matching Qdrant's own single-channel RRF score.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
+import pickle
 import threading
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from config import DEFAULT_RETRIEVAL_CONFIDENCE_THRESHOLD, Settings
 from errors import RetrievalUnavailableError
 from logging_config import log_event
-from rag.corpus import RetrievalDocument, build_corpus
+from rag.corpus import PROJECT_ROOT, RetrievalDocument, build_corpus
 from rag.embeddings import (
+    DEFAULT_DENSE_MODEL,
+    DEFAULT_SPARSE_MODEL,
     DenseEmbedder,
     SparseEmbedder,
     SparseVector,
@@ -35,6 +40,76 @@ from rag.embeddings import (
 )
 
 LOGGER = logging.getLogger("dbpedia_mapping_assistant.retrieval")
+
+# build_index() embeds the whole ~2,948-property corpus in one batched pass
+# and this module's own docstring already calls that a "once per process"
+# cost -- true within a process, but every fresh `just run-http` pays it
+# again from zero (confirmed live: ~10+ minutes on a CPU-only embedder),
+# because _INDEX_CACHE only ever lived in RAM. The corpus (DBpedia ontology
+# + published Amharic mappings) changes only when someone runs
+# `refresh-ontology`/`refresh-mappings`, so a disk cache keyed by a hash of
+# the actual document texts plus the embedder model names is safe: it's
+# reused across restarts and automatically invalidated the moment the
+# corpus content or embedding model actually changes, never served stale.
+_INDEX_CACHE_DIR = PROJECT_ROOT / "data" / ".cache"
+_INDEX_CACHE_VERSION = "v1"
+
+
+def _corpus_fingerprint(texts: list[str]) -> str:
+    digest = hashlib.sha256()
+    digest.update(_INDEX_CACHE_VERSION.encode("utf-8"))
+    digest.update(DEFAULT_DENSE_MODEL.encode("utf-8"))
+    digest.update(DEFAULT_SPARSE_MODEL.encode("utf-8"))
+    for text in texts:
+        digest.update(b"\x00")
+        digest.update(text.encode("utf-8"))
+    return digest.hexdigest()
+
+
+def _index_cache_path(fingerprint: str) -> Path:
+    return _INDEX_CACHE_DIR / f"index_{fingerprint[:32]}.pkl"
+
+
+def _load_cached_vectors(
+    fingerprint: str,
+) -> tuple[list[list[float]], list[SparseVector]] | None:
+    cache_path = _index_cache_path(fingerprint)
+    if not cache_path.is_file():
+        return None
+    try:
+        with cache_path.open("rb") as handle:
+            payload = pickle.load(handle)
+    except Exception as exc:  # a corrupt/foreign-format cache file must never
+        # crash retrieval -- fall back to rebuilding exactly as if there
+        # were no cache at all.
+        log_event(LOGGER, "retrieval.index_cache_unreadable", error=exc.__class__.__name__)
+        return None
+    if payload.get("fingerprint") != fingerprint:
+        return None
+    return payload["dense_vectors"], payload["sparse_vectors"]
+
+
+def _save_cached_vectors(
+    fingerprint: str, dense_vectors: list[list[float]], sparse_vectors: list[SparseVector]
+) -> None:
+    try:
+        _INDEX_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cache_path = _index_cache_path(fingerprint)
+        tmp_path = cache_path.with_suffix(".pkl.tmp")
+        with tmp_path.open("wb") as handle:
+            pickle.dump(
+                {
+                    "fingerprint": fingerprint,
+                    "dense_vectors": dense_vectors,
+                    "sparse_vectors": sparse_vectors,
+                },
+                handle,
+            )
+        tmp_path.replace(cache_path)  # atomic on the same filesystem -- a
+        # reader never sees a half-written file.
+    except OSError as exc:  # a read-only filesystem or full disk should
+        # degrade to "rebuild every time", not crash the server.
+        log_event(LOGGER, "retrieval.index_cache_write_failed", error=exc.__class__.__name__)
 
 
 @dataclass(frozen=True)
@@ -162,8 +237,28 @@ def build_index(
     unless you specifically need a fresh, uncached index (e.g. in tests)."""
 
     docs = documents if documents is not None else build_corpus()
-    log_event(LOGGER, "retrieval.index_build_started", document_count=len(docs))
     texts = [doc.search_text() for doc in docs]
+
+    # Only the real, default embedders are worth disk-caching: test callers
+    # pass cheap deterministic fakes (already instant, and must never be
+    # cached alongside the real model's vectors), and `documents` being
+    # explicitly given is exactly that same "don't touch the shared cache"
+    # signal `get_index()` already uses below.
+    using_production_embedders = (
+        documents is None and dense_embedder is embed_dense and sparse_embedder is embed_sparse
+    )
+    fingerprint = _corpus_fingerprint(texts) if using_production_embedders else None
+
+    if fingerprint is not None:
+        cached = _load_cached_vectors(fingerprint)
+        if cached is not None:
+            dense_vectors, sparse_vectors = cached
+            log_event(LOGGER, "retrieval.index_loaded_from_cache", document_count=len(docs))
+            return RetrievalIndex(
+                documents=docs, dense_vectors=dense_vectors, sparse_vectors=sparse_vectors
+            )
+
+    log_event(LOGGER, "retrieval.index_build_started", document_count=len(docs))
 
     # The production embedders support batched calls that are an order of
     # magnitude faster on CPU than per-document calls (~2,948 real ontology
@@ -181,6 +276,10 @@ def build_index(
         sparse_vectors = [sparse_embedder(text) for text in texts]
 
     log_event(LOGGER, "retrieval.index_build_completed", document_count=len(docs))
+
+    if fingerprint is not None:
+        _save_cached_vectors(fingerprint, dense_vectors, sparse_vectors)
+
     return RetrievalIndex(
         documents=docs, dense_vectors=dense_vectors, sparse_vectors=sparse_vectors
     )

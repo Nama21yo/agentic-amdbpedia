@@ -18,6 +18,19 @@ export interface PredictedMapping {
 	confidence: number;
 }
 
+/**
+ * The pipeline's `format_mapping_syntax` step always computes both of
+ * these deterministically alongside `mappings` (`mcp_server/pipeline.py`)
+ * — the same MediaWiki `{{TemplateMapping ...}}` wikitext a publish would
+ * actually write, and its XML-syntax equivalent. Not persisted on
+ * `ReviewItem`: cheaply regenerable from `mappings`/`domainClass` at any
+ * time, so nothing worth duplicating in Postgres.
+ */
+export interface MappingSyntax {
+	mappingWikitext: string;
+	xmlRules: string;
+}
+
 export interface ChatMessage {
 	role: 'user' | 'assistant';
 	content: string;

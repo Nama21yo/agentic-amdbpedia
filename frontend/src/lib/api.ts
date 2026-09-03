@@ -9,6 +9,7 @@ import type {
 	AgentStep,
 	CoverageStats,
 	MappingCandidate,
+	MappingSyntax,
 	PredictedMapping,
 	ReviewItem
 } from './types';
@@ -44,7 +45,7 @@ async function safeFetch(input: string, init?: RequestInit): Promise<Response> {
 	}
 }
 
-type PreviewEvent = AgentStep | { node: 'result'; mappings: PredictedMapping[] };
+type PreviewEvent = AgentStep | ({ node: 'result'; mappings: PredictedMapping[] } & MappingSyntax);
 
 /**
  * EXISTING: POST {CROSS_LINGUAL_URL}/v1/preview — text/event-stream

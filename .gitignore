@@ -12,3 +12,4 @@ __pycache__/
 data/training_examples.jsonl
 data/training_exports/
 data/review_queue.db
+data/.cache/

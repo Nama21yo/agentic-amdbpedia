@@ -80,6 +80,8 @@
 				for await (const event of previewMapping(value, wantsClass)) {
 					if ('mappings' in event) {
 						turn.mappings = event.mappings;
+						turn.mappingWikitext = event.mappingWikitext;
+						turn.xmlRules = event.xmlRules;
 					} else {
 						turn.steps = [...turn.steps, event];
 					}
@@ -218,6 +220,17 @@
 										</TableBody>
 									</Table>
 								</div>
+								{#if turn.mappingWikitext}
+									<details class="rounded-lg border">
+										<summary
+											class="cursor-pointer px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+										>
+											View mapping wikitext
+										</summary>
+										<pre
+											class="overflow-x-auto border-t bg-muted/40 px-3 py-2.5 font-mono text-xs whitespace-pre-wrap">{turn.mappingWikitext}</pre>
+									</details>
+								{/if}
 								<a
 									href={resolve('/review')}
 									class="flex w-fit items-center gap-2 rounded-lg border border-success/40 bg-success/10 px-3 py-2 text-sm font-medium text-success"

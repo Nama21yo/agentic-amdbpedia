@@ -25,6 +25,7 @@ handling — verified directly before relying on it.
 
 from __future__ import annotations
 
+import asyncio
 import importlib
 import logging
 import uuid
@@ -262,13 +263,33 @@ def _extract_node(state: PipelineState) -> dict[str, Any]:
     return {"template_name": template.name, "fields": kept_fields, "warnings": warnings}
 
 
-def _predict_node(state: PipelineState) -> dict[str, Any]:
+async def _predict_node(state: PipelineState) -> dict[str, Any]:
+    """Predict a property for every extracted field.
+
+    `predict_property` is a blocking call (retrieval + an optional
+    synchronous LLM rerank over HTTP to Ollama) — run one directly inside
+    this `async` node the way the sequential-fallback graph does with a
+    sync node, and it blocks the *entire* event loop for as long as it
+    takes: no other request (a different browser tab, a health check) can
+    be served while it's in flight. `asyncio.to_thread` moves each call
+    off the loop so the rest of the server stays responsive.
+
+    Deliberately still sequential across fields, not `asyncio.gather`ed —
+    tried that first and it deadlocks (confirmed live): DSPy's
+    `dspy.context(lm=lm)` mutates global/thread-shared state per call, and
+    two `predict_property` calls racing that from separate
+    `asyncio.to_thread` worker threads hang rather than raising. One
+    field's LLM rerank still calling out to a real endpoint is a genuinely
+    rare, small cost per field (and free entirely once a field's retrieval
+    finds no candidates at all, or once rag.predict's own circuit breaker
+    has already opened) — not worth reintroducing a hang to shave off."""
+
     domain_class = state.get("domain_class")
-    predictions: dict[str, PredictionResult] = {}
     warnings = list(state.get("warnings", []))
+    predictions: dict[str, PredictionResult] = {}
 
     for field in state.get("fields", []):
-        outcome = predict_property(field.name, target_class=domain_class)
+        outcome = await asyncio.to_thread(predict_property, field.name, target_class=domain_class)
         if isinstance(outcome, PredictionResult):
             predictions[field.name] = outcome
         else:
@@ -533,7 +554,22 @@ async def stream_mapping_pipeline(
         run_id=resolved_run_id,
         mapping_count=len(state.get("mappings", [])),
     )
-    yield {"node": "result", "mappings": state.get("mappings", [])}
+    # `_format_node` (format_mapping_syntax) already computes real,
+    # deterministic MediaWiki mapping XML/wikitext for exactly this result
+    # -- it just never left this function before: this was the only place
+    # in the whole stack a caller could still reach it (ReviewItem never
+    # stores it either, by design -- it's cheaply regenerable from
+    # `mappings`/`domain_class` at any time, not data worth duplicating in
+    # Postgres). Confirmed live: without this, the "Generating mapping
+    # XML" step reported "done" while producing something no caller could
+    # ever see. camelCase to match frontend/src/lib/types.ts's convention
+    # for every other field this event already carries.
+    yield {
+        "node": "result",
+        "mappings": state.get("mappings", []),
+        "mappingWikitext": state.get("mapping_wikitext", ""),
+        "xmlRules": state.get("xml_rules", ""),
+    }
 
 
 def _step_event(node_name: str) -> dict[str, Any]:

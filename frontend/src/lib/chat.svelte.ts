@@ -15,6 +15,8 @@ export interface PipelineTurn {
 	targetClass?: string;
 	steps: AgentStep[];
 	mappings: PredictedMapping[] | null;
+	mappingWikitext?: string;
+	xmlRules?: string;
 	running: boolean;
 	error?: string;
 }
