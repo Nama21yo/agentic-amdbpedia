@@ -189,7 +189,9 @@ def test_search_target_class_breaks_ties_between_equally_ranked_documents() -> N
     assert results[0].property == "propB"
 
 
-def test_index_disk_cache_roundtrips_and_is_fingerprint_scoped(tmp_path: Path, monkeypatch):
+def test_index_disk_cache_roundtrips_and_is_fingerprint_scoped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """build_index() re-embedding the whole ~2,948-property ontology corpus
     from scratch on every process start took 10+ minutes on a CPU-only
     embedder (confirmed live) -- the disk cache in rag/retrieval.py exists
@@ -220,7 +222,9 @@ def test_index_disk_cache_roundtrips_and_is_fingerprint_scoped(tmp_path: Path, m
     assert retrieval._load_cached_vectors(other_fingerprint) is None
 
 
-def test_index_disk_cache_survives_a_corrupt_file(tmp_path: Path, monkeypatch):
+def test_index_disk_cache_survives_a_corrupt_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A cache file from an old format, or truncated by a killed process
     mid-write, must degrade to "rebuild the index" -- never crash the
     server that would otherwise be serving real requests."""

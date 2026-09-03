@@ -11,7 +11,15 @@ dependencies = [
     "groq>=0.31.0",
     "langgraph>=1.2.11",
     "litellm==1.98.0",
-    "mcp[cli]>=1.10.0",
+    # mcp 2.x renamed FastMCP to MCPServer and changed other APIs
+    # (mcp_server/server.py imports `from mcp.server.fastmcp import
+    # FastMCP` directly) -- an unbounded ">=1.10.0" is what let CI's
+    # scheduled e2e-test job start failing every week once mcp 2.x
+    # actually released: `--frozen` protects any *already-generated*
+    # uv.lock, but the next plain `uv lock` was always going to be free
+    # to resolve straight into 2.x again. `<2` makes that impossible
+    # instead of relying on remembering to re-pin it by hand.
+    "mcp[cli]>=1.10.0,<2",
     "mwparserfromhell>=0.7.2",
     "pydantic>=2.11.0",
     "pydantic-settings>=2.10.0",
