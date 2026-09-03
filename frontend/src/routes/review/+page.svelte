@@ -43,7 +43,12 @@
 	let confirmPublishFor = $state<string | null>(null);
 
 	function ensureDraft(item: ReviewItem) {
-		if (!drafts[item.id]) drafts[item.id] = structuredClone(item.mappings);
+		// `item` comes from the `items` $state array, so `item.mappings` is a
+		// Svelte 5 reactive proxy, not a plain array -- structuredClone()
+		// doesn't know how to clone Svelte's proxy internals and throws
+		// DataCloneError (confirmed live). $state.snapshot() is Svelte's own
+		// API for exactly this: a plain, disconnected, JSON-safe deep copy.
+		if (!drafts[item.id]) drafts[item.id] = $state.snapshot(item.mappings);
 	}
 
 	async function load() {
