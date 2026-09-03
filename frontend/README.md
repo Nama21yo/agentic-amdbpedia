@@ -6,10 +6,10 @@ TypeScript, Tailwind v4, scaffolded with `sv create` and installed with pnpm.
 ## What's real vs. planned
 
 The UI, routing, and API client are real and functional, and every endpoint
-this frontend calls lives on `cross-lingual`'s own backend
-(`mcp_server/http_app.py`, run with `uvicorn mcp_server.http_app:app`
-alongside the MCP stdio server) — this frontend has no remaining dependency
-on `agentic-dbpedia` at all. `getCoverageStats` used to call
+this frontend calls lives on `agentic-amdbpedia`'s own backend
+(`mcp_server/http_app.py`, run with `uvicorn mcp_server.http_app:create_app
+--factory` alongside the MCP stdio server) — this frontend has no remaining
+dependency on `agentic-dbpedia` at all. `getCoverageStats` used to call
 `agentic-dbpedia`'s `/api/statistics/summary`, an endpoint that (found live)
 never actually existed there; it's since moved to `GET
 {CROSS_LINGUAL_URL}/v1/coverage`, computed from this repo's own review

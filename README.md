@@ -74,6 +74,139 @@ reviewer's explicit `publish: true` on the decision call, gated by
 closes the loop by loading a `.nt` extraction file into a throwaway
 Tentris container and checking the published triple actually appears.
 
+## How the pipeline works, step by step
+
+Pasting an infobox (either through the frontend chat or `POST /v1/preview`)
+runs four steps (`mcp_server/pipeline.py`), each streamed to the caller as
+it finishes:
+
+1. **Extract infobox fields** — parses the wikitext template and pulls out
+   every `field = value` pair. Any field that's *already* a published
+   Amharic mapping (`data/wiki_cache/mapping_am.xml`) is dropped here —
+   the pipeline never re-predicts something already live.
+2. **Predict ontology properties** — each surviving field is matched
+   against the DBpedia ontology corpus with hybrid dense+sparse retrieval
+   (see "How confidence is calculated" below), then optionally reranked
+   by a local LLM. A field with no confident retrieval candidate gets a
+   warning instead of a guess.
+3. **Generate mapping XML** — deterministic, no model involved. Builds
+   both the `<TemplateMapping>` XML and the equivalent MediaWiki wikitext
+   that a publish would actually write — the frontend shows both, each
+   behind a "View mapping wikitext" / "View mapping XML" disclosure under
+   the result table.
+4. **Save to review queue** — one row written to Postgres, `status:
+   "pending_review"`. If step 2 predicted nothing at all, this step still
+   runs but writes nothing (no `templateProperty` survived to review).
+
+### What happens with unusable input
+
+Nothing here ever fabricates an answer or writes something false — every
+unusable input degrades to an explicit "found nothing" state instead:
+
+- **Plain text that isn't an infobox and doesn't match anything** (e.g. a
+  random question) is routed to `find_semantic_match` instead of the full
+  pipeline, and returns `{"status": "no_match", "matches": []}` — shown
+  in the frontend as *"No confident match found in the ontology for that
+  term."*
+- **Text shaped like `{{...}}` but not a real infobox** (no recognizable
+  template name) runs the full 4-step pipeline harmlessly — every step
+  still reports "done" — but ends with `mappings: []`, so nothing is
+  written to the review queue and the UI shows *"No properties were
+  confidently mapped from that infobox."*
+- **Anything over 500 characters** is rejected outright with HTTP 400
+  before touching retrieval at all.
+
+### How confidence is calculated
+
+`rag/retrieval.py::search()` combines two independent retrieval channels
+with **reciprocal rank fusion (RRF)**, not a single model's opinion:
+
+1. The query is embedded two ways — **dense** (semantic similarity, the
+   `afro-xlmr` property retriever) and **sparse** (lexical/BM25 term
+   overlap, catches acronyms a semantic model would miss).
+2. Each channel ranks its own top candidates independently.
+3. RRF fuses the two rankings: a document ranked **#1 in one channel
+   alone** contributes `1 / (1 + 1) = 0.5`; ranked **#1 in both channels**
+   scores `0.5 + 0.5 = 1.0`. This is the number shown as "confidence" —
+   not a raw cosine-similarity score.
+4. A top score that only ever came from **one** channel, with no curated
+   Amharic/English alias directly backing it up, is rejected as a
+   no-match even though it was technically top-ranked — a guard against a
+   coincidental lexical overlap posing as a confident answer.
+5. Anything below `RETRIEVAL_CONFIDENCE_THRESHOLD` (default `0.35`,
+   `config.py`) is `NoMatchFound`.
+
+An optional LLM rerank can run on top of this, but only ever to *pick
+among* the retriever's own candidates (`snap_to_candidate()` fuzzy-snaps
+any answer back to an exact candidate) — the confidence number shown is
+always the retriever's own RRF score for whichever property was chosen,
+never something the LLM invents.
+
+### How the coverage statistics are calculated
+
+`GET /v1/coverage` (`db/session.py::coverage_stats`) computes three plain
+aggregates over the review queue — nothing external, nothing crawled:
+
+- **Templates** = `COUNT(DISTINCT template_name)` across every review item
+  ever submitted, any status — "how many distinct infobox templates has
+  this pipeline ever been run against," not "how many templates exist on
+  Amharic Wikipedia" (this repo has no way to enumerate that without a
+  wiki-wide crawl, deliberately not attempted here).
+- **Mapped** = the same count, restricted to templates with at least one
+  row whose `status = "published"` — actually written live to
+  `mappings.dbpedia.org`, not merely predicted or approved-but-unpublished.
+- **Coverage** = `Mapped / Templates × 100`, rounded to one decimal place
+  (`0.0` if `Templates` is 0).
+
+## Publishing to the live wiki
+
+Publishing a reviewer-approved mapping back to `mappings.dbpedia.org` is a
+real, outward-facing MediaWiki edit, gated behind explicit consent
+(`mcp_server/consent.py::require_consent`) and real bot credentials — it
+is never automatic just from approving a review item. To get those
+credentials:
+
+1. Log into your account at **mappings.dbpedia.org**.
+2. Go to **`Special:BotPasswords`**.
+3. Give it a label (e.g. `agentic-amdbpedia`) and grant only the
+   permissions it actually needs (edit existing pages, create pages).
+4. MediaWiki generates a bot username of the form
+   `YourUsername@BotLabel` and a separate bot password, shown once.
+5. Set `MEDIAWIKI_BOT_USERNAME` (the full `YourUsername@BotLabel` string)
+   and `MEDIAWIKI_BOT_PASSWORD` in `.env`.
+
+**Never use a real account password here** — `mcp_server/publish.py`'s own
+docstring is explicit about this: Bot Password only. Without these set, a
+publish attempt fails clearly with `MediaWikiCredentialsError`; the review
+decision itself (approve/reject) still goes through either way.
+
+## Demo prompts
+
+Concrete inputs to try, split by which surface you're demoing.
+
+**Frontend chat** (`cd frontend && pnpm run dev --open`, then just type into
+the one input box — it auto-detects infobox vs. plain question):
+
+| Try pasting/typing this | What you'll see |
+|---|---|
+| `{{Infobox river\n\| ስም = አባይ ወንዝ\n\| ርዝመት = 6,650 ኪ.ሜ\n}}` (target class `River`) | Full pipeline; `ስም` silently skipped (already published), `ርዝመት → length` predicted, sent to the review queue |
+| `ሙያ` | Single-field lookup: `profession` (class `Person`), a clean top score |
+| `ርዝመት` | Single-field lookup: `length` (class `Bridge`) plus two lower-confidence alternatives shown as pills |
+| `ዜግነት` | "No confident match found in the ontology for that term." |
+| Any infobox where every field is already published (e.g. `{{Infobox person \| ስም = ... \| ሙያ = ... }}`) | Full pipeline runs, ends with "No properties were confidently mapped" |
+| `/review` | The queue of everything the pipeline above has submitted — approve, reject, or correct a mapping, optionally publish |
+| `/coverage` | Live Templates/Mapped/Coverage numbers, computed as described above |
+
+**MCP tools** (via Claude Desktop, once configured — see below — or any
+MCP client): call `find_semantic_match` with `amharic_property="ርዝመት"`
+and no `target_class` for a grounded multi-candidate answer;
+`generate_mapping_syntax` with a `MappingPayload` (`domain_class="Bridge"`,
+one `MappingEntry(templateProperty="ርዝመት", ontologyProperty="length")`)
+for deterministic XML with no LLM in the loop; and
+`resources://benchmarks/latest` for the last evaluation run's precision
+numbers. `examples/demo.md` has full worked transcripts for these,
+including the prompt-injection guardrail path.
+
 ## Development
 
 ```bash
@@ -102,6 +235,13 @@ for the full endpoint-to-screen mapping. Retrieve-then-rerank prediction
 (`rag/predict.py`) additionally wants a local Ollama server serving
 `gemma2:9b`; without one, predictions still work off retrieval alone
 (`used_llm: false` in the response) rather than failing.
+
+**First run is slow, every run after that isn't.** `just run-http` embeds
+the whole ~2,948-property ontology corpus on its very first ever start
+(minutes, CPU-bound) and caches the result to `data/.cache/` — every
+restart after that reuses the cache and starts serving real requests in
+well under a second. Deleting `data/.cache/` (or a corpus change via
+`refresh-ontology`/`refresh-mappings`) forces one more slow rebuild.
 
 ## Claude Desktop
 
