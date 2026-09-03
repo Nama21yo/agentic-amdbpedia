@@ -1,6 +1,12 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { BackendUnavailableError, findSemanticMatch, previewMapping } from '$lib/api';
+	import {
+		BackendUnavailableError,
+		DecisionFailedError,
+		decideReview,
+		findSemanticMatch,
+		previewMapping
+	} from '$lib/api';
 	import {
 		type PipelineTurn,
 		type AnswerTurn,
@@ -20,11 +26,19 @@
 		TableRow
 	} from '$lib/components/ui/table/index.js';
 	import ConfidencePill from '$lib/components/ConfidencePill.svelte';
+	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import StepTracker from '$lib/components/StepTracker.svelte';
 	import ThinkingIndicator from '$lib/components/ThinkingIndicator.svelte';
 	import logo from '$lib/assets/dbpedia-am-logo.png';
 	import Fa from 'svelte-fa';
-	import { faArrowUp, faArrowRight, faCircleCheck } from '@fortawesome/free-solid-svg-icons';
+	import { toast } from 'svelte-sonner';
+	import {
+		faArrowUp,
+		faArrowRight,
+		faCircleCheck,
+		faCircleXmark,
+		faSpinner
+	} from '@fortawesome/free-solid-svg-icons';
 
 	let input = $state('');
 	let targetClass = $state('');
@@ -82,6 +96,7 @@
 						turn.mappings = event.mappings;
 						turn.mappingWikitext = event.mappingWikitext;
 						turn.xmlRules = event.xmlRules;
+						turn.reviewItemId = event.reviewItemId;
 					} else {
 						turn.steps = [...turn.steps, event];
 					}
@@ -139,6 +154,45 @@
 		if (event.key === 'Enter' && !event.shiftKey) {
 			event.preventDefault();
 			submit();
+		}
+	}
+
+	// Approve/reject right here, on the review-queue row this exact chat
+	// turn just created -- previously the only way to act on it was to
+	// leave for /review, find the same row again, and decide there.
+	// Deliberately approve/reject only, no correction editing and no
+	// publish here: those stay real, separate, more deliberate actions on
+	// /review (publish especially -- a live, outward-facing MediaWiki
+	// write gated behind its own confirmation dialog there) rather than
+	// one-click from a chat bubble.
+	async function decide(turn: PipelineTurn, decision: 'approved' | 'rejected') {
+		if (!turn.reviewItemId || turn.deciding) return;
+		const id = turn.reviewItemId;
+		turn.deciding = true;
+		turn.decisionError = undefined;
+
+		const request = decideReview(id, decision);
+		toast.promise(request, {
+			loading: decision === 'approved' ? 'Approving…' : 'Rejecting…',
+			success: (updated) => {
+				turn.reviewStatus = updated.status;
+				return `Marked as ${updated.status.replace('_', ' ')}.`;
+			},
+			error: (err) => {
+				turn.decisionError =
+					err instanceof DecisionFailedError
+						? err.message
+						: 'Could not record that decision — backend not reachable.';
+				return turn.decisionError;
+			}
+		});
+
+		try {
+			await request;
+		} catch {
+			// already surfaced via the toast.promise error callback above
+		} finally {
+			turn.deciding = false;
 		}
 	}
 
@@ -242,14 +296,53 @@
 											class="overflow-x-auto border-t bg-muted/40 px-3 py-2.5 font-mono text-xs whitespace-pre-wrap">{turn.xmlRules}</pre>
 									</details>
 								{/if}
-								<a
-									href={resolve('/review')}
-									class="flex w-fit items-center gap-2 rounded-lg border border-success/40 bg-success/10 px-3 py-2 text-sm font-medium text-success"
-								>
-									<Fa icon={faCircleCheck} class="size-3.5 shrink-0" />
-									Sent to the Review Queue
-									<Fa icon={faArrowRight} class="size-3 shrink-0" />
-								</a>
+								{#if turn.reviewStatus}
+									<div class="flex w-fit items-center gap-2">
+										<StatusBadge status={turn.reviewStatus} />
+										<a
+											href={resolve('/review')}
+											class="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
+										>
+											View in Review Queue
+										</a>
+									</div>
+								{:else if turn.reviewItemId}
+									<div class="flex flex-wrap items-center gap-2">
+										<Button
+											size="sm"
+											variant="outline"
+											class="border-success/40 text-success hover:bg-success/10 hover:text-success"
+											disabled={turn.deciding}
+											onclick={() => decide(turn, 'approved')}
+										>
+											<Fa
+												icon={turn.deciding ? faSpinner : faCircleCheck}
+												class="size-3.5 {turn.deciding ? 'animate-spin' : ''}"
+											/>
+											Approve
+										</Button>
+										<Button
+											size="sm"
+											variant="outline"
+											class="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+											disabled={turn.deciding}
+											onclick={() => decide(turn, 'rejected')}
+										>
+											<Fa icon={faCircleXmark} class="size-3.5" />
+											Reject
+										</Button>
+										<a
+											href={resolve('/review')}
+											class="flex items-center gap-1.5 text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
+										>
+											or correct it on the Review Queue
+											<Fa icon={faArrowRight} class="size-2.5 shrink-0" />
+										</a>
+									</div>
+									{#if turn.decisionError}
+										<p class="text-sm text-destructive">{turn.decisionError}</p>
+									{/if}
+								{/if}
 							{:else if turn.mappings}
 								<p class="text-sm text-muted-foreground">
 									No properties were confidently mapped from that infobox.

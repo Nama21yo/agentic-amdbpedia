@@ -569,6 +569,12 @@ async def stream_mapping_pipeline(
         "mappings": state.get("mappings", []),
         "mappingWikitext": state.get("mapping_wikitext", ""),
         "xmlRules": state.get("xml_rules", ""),
+        # `_persist_node` already computes this (`None` whenever `mappings`
+        # ended up empty -- nothing was written) but, like mapping_wikitext
+        # above, it never left this function before: a caller had no way
+        # to approve/reject the very row this run just created without a
+        # separate `GET /v1/reviews` round trip to find its id.
+        "reviewItemId": state.get("review_item_id"),
     }
 
 

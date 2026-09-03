@@ -6,7 +6,7 @@
 // navigate away and back" without inventing backend storage this app
 // doesn't otherwise need.
 import { browser } from '$app/environment';
-import type { AgentStep, MappingCandidate, PredictedMapping } from './types';
+import type { AgentStep, MappingCandidate, PredictedMapping, ReviewStatus } from './types';
 
 export interface PipelineTurn {
 	id: string;
@@ -17,6 +17,16 @@ export interface PipelineTurn {
 	mappings: PredictedMapping[] | null;
 	mappingWikitext?: string;
 	xmlRules?: string;
+	// `null` mappings/reviewItemId is "the run hasn't finished yet"; a
+	// present-but-empty `mappings` array with `reviewItemId: null` is "it
+	// finished, but nothing was confident enough to write" (see
+	// mcp_server/pipeline.py's persist_review_item -- it only creates a
+	// row when mappings is non-empty). Approve/reject only ever apply to
+	// the latter: a real row this run actually created.
+	reviewItemId?: string | null;
+	reviewStatus?: ReviewStatus;
+	deciding?: boolean;
+	decisionError?: string;
 	running: boolean;
 	error?: string;
 }

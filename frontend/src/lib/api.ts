@@ -45,7 +45,9 @@ async function safeFetch(input: string, init?: RequestInit): Promise<Response> {
 	}
 }
 
-type PreviewEvent = AgentStep | ({ node: 'result'; mappings: PredictedMapping[] } & MappingSyntax);
+type PreviewEvent =
+	| AgentStep
+	| ({ node: 'result'; mappings: PredictedMapping[]; reviewItemId: string | null } & MappingSyntax);
 
 /**
  * EXISTING: POST {CROSS_LINGUAL_URL}/v1/preview — text/event-stream
@@ -111,7 +113,8 @@ export async function findSemanticMatch(
 /**
  * EXISTING: GET {CROSS_LINGUAL_URL}/v1/reviews — the Postgres-backed queue
  * (mcp_server/http_app.py, refs implementation.md 14.1). Run it with
- * `uvicorn mcp_server.http_app:app` alongside the MCP stdio server.
+ * `uvicorn mcp_server.http_app:create_app --factory` alongside the MCP
+ * stdio server.
  */
 export async function listReviewQueue(): Promise<ReviewItem[]> {
 	const res = await safeFetch(`${CROSS_LINGUAL_URL}/v1/reviews`);
