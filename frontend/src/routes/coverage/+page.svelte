@@ -13,10 +13,11 @@
 		try {
 			stats = await getCoverageStats();
 		} catch (err) {
+			console.error('Failed to load coverage stats:', err);
 			error =
 				err instanceof BackendUnavailableError
 					? 'cross-lingual is not reachable — check that the HTTP server (just run-http) is running.'
-					: 'Unexpected error while loading coverage stats.';
+					: `Unexpected error while loading coverage stats: ${err instanceof Error ? err.message : String(err)}`;
 		}
 	}
 

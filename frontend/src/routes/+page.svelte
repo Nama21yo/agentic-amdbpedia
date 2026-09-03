@@ -47,10 +47,11 @@
 				}
 			}
 		} catch (err) {
+			console.error('Mapping agent run failed:', err);
 			toast.error(
 				err instanceof BackendUnavailableError
 					? 'cross-lingual is not reachable — check that the HTTP server (just run-http) is running.'
-					: 'Unexpected error while running the mapping agent.'
+					: `Unexpected error while running the mapping agent: ${err instanceof Error ? err.message : String(err)}`
 			);
 		} finally {
 			running = false;
@@ -75,10 +76,11 @@
 					: result.matches.map((m) => `${m.property} (${Math.round(m.score * 100)}%)`).join(', ');
 			chatMessages = [...chatMessages, { role: 'assistant', content: reply }];
 		} catch (err) {
+			console.error('Assistant lookup failed:', err);
 			const reply =
 				err instanceof BackendUnavailableError
 					? 'cross-lingual is not reachable yet — this answers live once its HTTP endpoint is implemented.'
-					: 'Unexpected error while asking the assistant.';
+					: `Unexpected error while asking the assistant: ${err instanceof Error ? err.message : String(err)}`;
 			chatMessages = [...chatMessages, { role: 'assistant', content: reply }];
 		} finally {
 			chatBusy = false;

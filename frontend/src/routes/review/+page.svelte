@@ -58,10 +58,11 @@
 				}
 			}
 		} catch (err) {
+			console.error('Failed to load the review queue:', err);
 			loadError =
 				err instanceof BackendUnavailableError
 					? 'cross-lingual is not reachable — check that the HTTP server (just run-http) is running.'
-					: 'Unexpected error while loading the review queue.';
+					: `Unexpected error while loading the review queue: ${err instanceof Error ? err.message : String(err)}`;
 		} finally {
 			loading = false;
 		}

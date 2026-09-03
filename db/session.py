@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from config import DEFAULT_DATABASE_URL, Settings
+from config import Settings
 from db.models import REVIEW_STATUSES, Base, ReviewItem
 from errors import ClientSafeError
 
@@ -43,9 +43,23 @@ class InvalidReviewStatusError(ClientSafeError):
 
 
 def resolve_database_url(settings: Settings | None = None) -> str:
-    if settings is not None:
-        return settings.database_url
-    return DEFAULT_DATABASE_URL
+    """`settings.database_url` if given, else read `Settings()` for real
+    (env vars / `.env`) -- **not** `config.DEFAULT_DATABASE_URL` directly.
+
+    Found live: `mcp_server/http_app.py`'s module-level `app = create_app()`
+    -- the actual object `uvicorn mcp_server.http_app:app` (and so `just
+    run-http`) serves -- calls this with `settings=None`. The previous
+    version of this function returned the hardcoded SQLite default
+    whenever `settings` was `None`, completely bypassing `Settings`'s own
+    env-file loading -- so `just run-http` silently used local SQLite
+    (`./data/review_queue.db`) no matter what `DATABASE_URL` said,
+    including pointed at the real docker-compose Postgres. `Settings()`'s
+    own `database_url` field already defaults to
+    `config.DEFAULT_DATABASE_URL` when `DATABASE_URL` genuinely isn't set,
+    so constructing it for real here, instead of shortcutting past it,
+    fixes this without losing that fallback.
+    """
+    return (settings or Settings()).database_url
 
 
 def create_engine(

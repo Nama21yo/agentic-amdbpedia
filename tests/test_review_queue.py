@@ -19,6 +19,7 @@ from db.session import (
     get_review_item,
     init_models,
     list_review_items,
+    resolve_database_url,
     session_factory,
     set_review_status,
 )
@@ -66,6 +67,24 @@ async def engine() -> AsyncIterator[AsyncEngine]:
     await init_models(test_engine)
     yield test_engine
     await test_engine.dispose()
+
+
+def test_resolve_database_url_reads_the_real_environment_when_no_settings_given(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression test: `mcp_server/http_app.py`'s module-level `app =
+    create_app()` -- the actual object `just run-http` serves -- calls
+    `create_engine(settings=None)`. `resolve_database_url` used to
+    short-circuit straight to the hardcoded SQLite default whenever
+    `settings` was `None`, silently ignoring a real `DATABASE_URL` in the
+    environment/`.env` entirely -- found live: every `just run-http` run
+    was writing to local SQLite regardless of a correctly-configured
+    docker-compose Postgres `DATABASE_URL`."""
+
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_test_placeholder")
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@some-real-host/db")
+
+    assert resolve_database_url(None) == "postgresql+asyncpg://u:p@some-real-host/db"
 
 
 @pytest.mark.asyncio
