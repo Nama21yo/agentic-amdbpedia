@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import {
 		BackendUnavailableError,
 		DecisionFailedError,
@@ -6,10 +7,23 @@
 		listReviewQueue
 	} from '$lib/api';
 	import type { PredictedMapping, ReviewItem, ReviewStatus } from '$lib/types';
-	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import { toast } from 'svelte-sonner';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Card } from '$lib/components/ui/card/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
+	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import MappingEditor from '$lib/components/MappingEditor.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
-	import { pushToast } from '$lib/toast.svelte';
+	import { cn } from '$lib/utils.js';
+	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import InboxIcon from '@lucide/svelte/icons/inbox';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 
 	let items = $state<ReviewItem[]>([]);
 	let loading = $state(true);
@@ -53,7 +67,7 @@
 		}
 	}
 
-	load();
+	onMount(load);
 
 	const counts = $derived(
 		items.reduce<Record<string, number>>((acc, item) => {
@@ -93,18 +107,17 @@
 				publish: decision === 'approved' && Boolean(publishFlags[item.id])
 			});
 			applyServerState(updated);
-			pushToast(
+			toast.success(
 				updated.status === 'published'
 					? `Published ${updated.templateName} to the live wiki.`
-					: `Marked ${updated.templateName} as ${updated.status.replace('_', ' ')}.`,
-				'success'
+					: `Marked ${updated.templateName} as ${updated.status.replace('_', ' ')}.`
 			);
 		} catch (err) {
 			if (err instanceof DecisionFailedError) {
 				if (err.review) applyServerState(err.review);
-				pushToast(`Publish failed: ${err.message}`, 'error', 8000);
+				toast.error(`Publish failed: ${err.message}`);
 			} else {
-				pushToast('Could not record that decision — backend not reachable.', 'error');
+				toast.error('Could not record that decision — backend not reachable.');
 			}
 		} finally {
 			submitting[item.id] = false;
@@ -131,74 +144,76 @@
 
 <div class="mb-6 flex items-start justify-between gap-4">
 	<div>
-		<h1 class="mb-1 text-xl font-semibold">Review Queue</h1>
-		<p class="text-sm text-neutral-400">
+		<h1 class="text-2xl font-semibold tracking-tight">Review Queue</h1>
+		<p class="mt-1 text-sm text-muted-foreground">
 			Mapping-agent predictions wait here until a reviewer approves, corrects, or rejects them.
 			Nothing is written to the live wiki without explicit publish consent per item.
 		</p>
 	</div>
-	<button
-		type="button"
-		class="shrink-0 rounded-lg border border-neutral-800 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-900"
-		onclick={load}
-		disabled={loading}
-	>
-		{loading ? 'Refreshing…' : 'Refresh'}
-	</button>
+	<Button variant="outline" size="sm" onclick={load} disabled={loading} class="shrink-0">
+		<RefreshCwIcon class={cn('size-3.5', loading && 'animate-spin')} />
+		Refresh
+	</Button>
 </div>
 
 <div class="mb-6 flex flex-wrap gap-1.5">
 	{#each filters as f (f.value)}
-		<button
-			type="button"
-			class={[
-				'rounded-full border px-3 py-1 text-xs font-medium',
-				filter === f.value
-					? 'border-blue-700 bg-blue-950/60 text-blue-300'
-					: 'border-neutral-800 text-neutral-400 hover:border-neutral-700 hover:text-neutral-200'
-			]}
+		<Button
+			variant={filter === f.value ? 'default' : 'outline'}
+			size="sm"
+			class="h-7 rounded-full px-3"
 			onclick={() => (filter = f.value)}
 		>
 			{f.label}
-			<span class="ml-1 tabular-nums opacity-70">
+			<span class="tabular-nums opacity-70">
 				{f.value === 'all' ? items.length : (counts[f.value] ?? 0)}
 			</span>
-		</button>
+		</Button>
 	{/each}
 </div>
 
 {#if loading}
 	<div class="space-y-3">
-		<div class="h-20 animate-pulse rounded-lg border border-neutral-800 bg-neutral-900/40"></div>
-		<div class="h-20 animate-pulse rounded-lg border border-neutral-800 bg-neutral-900/40"></div>
-		<div class="h-20 animate-pulse rounded-lg border border-neutral-800 bg-neutral-900/40"></div>
+		<Skeleton class="h-20 w-full" />
+		<Skeleton class="h-20 w-full" />
+		<Skeleton class="h-20 w-full" />
 	</div>
 {:else if loadError}
-	<p class="rounded-lg border border-amber-800 bg-amber-950/40 px-4 py-3 text-sm text-amber-300">
-		{loadError}
-	</p>
-{:else if visibleItems.length === 0}
-	<p
-		class="rounded-lg border border-dashed border-neutral-800 px-4 py-8 text-center text-sm text-neutral-500"
+	<div
+		class="flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning-foreground"
 	>
+		<TriangleAlertIcon class="size-4 shrink-0" />
+		{loadError}
+	</div>
+{:else if visibleItems.length === 0}
+	<div
+		class="flex flex-col items-center gap-2 rounded-lg border border-dashed py-12 text-center text-sm text-muted-foreground"
+	>
+		<InboxIcon class="size-8 opacity-40" />
 		Nothing here right now.
-	</p>
+	</div>
 {:else}
 	<ul class="space-y-3">
 		{#each visibleItems as item (item.id)}
 			{@const isPending = item.status === 'pending_review'}
 			{@const isOpen = Boolean(expanded[item.id])}
-			<li class="rounded-lg border border-neutral-800 bg-neutral-900/40">
+			<Card class="gap-0 overflow-hidden py-0">
 				<button
 					type="button"
-					class="flex w-full items-center justify-between gap-4 px-4 py-3 text-left"
+					class="flex w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-muted/40"
 					onclick={() => toggleExpanded(item)}
 				>
 					<div class="flex items-center gap-3">
-						<span class="w-3 text-neutral-600">{isOpen ? '-' : '+'}</span>
+						<span class="text-muted-foreground">
+							{#if isOpen}
+								<ChevronDownIcon class="size-4" />
+							{:else}
+								<ChevronRightIcon class="size-4" />
+							{/if}
+						</span>
 						<div>
-							<p class="text-sm font-medium text-neutral-100">{item.templateName}</p>
-							<p class="text-xs text-neutral-500">
+							<p class="text-sm font-medium">{item.templateName}</p>
+							<p class="text-xs text-muted-foreground">
 								{item.domainClass} · {item.mappings.length} mapping{item.mappings.length === 1
 									? ''
 									: 's'} · {new Date(item.submittedAt).toLocaleString()}
@@ -209,7 +224,7 @@
 				</button>
 
 				{#if isOpen}
-					<div class="border-t border-neutral-800 px-4 py-4">
+					<div class="border-t px-4 py-4">
 						{#if isPending && drafts[item.id]}
 							<MappingEditor
 								bind:mappings={drafts[item.id]}
@@ -227,82 +242,96 @@
 
 						{#if isPending}
 							<div class="mt-4 flex flex-col gap-3">
-								<textarea
+								<Textarea
 									bind:value={reasons[item.id]}
 									placeholder="Reason (optional) — recorded on the decision log either way"
-									rows="2"
-									class="w-full rounded-lg border border-neutral-800 bg-neutral-950/60 p-2 text-sm placeholder:text-neutral-600"
-								></textarea>
+									rows={2}
+								/>
 
-								<label class="flex items-start gap-2 text-xs text-neutral-400">
-									<input
-										type="checkbox"
-										bind:checked={publishFlags[item.id]}
-										class="mt-0.5 accent-emerald-600"
-									/>
+								<Label class="items-start gap-2 text-xs font-normal text-muted-foreground">
+									<Checkbox bind:checked={publishFlags[item.id]} class="mt-0.5" />
 									<span>
 										Also publish to the live wiki on approval
-										<span class="text-neutral-600"
+										<span class="text-muted-foreground/70"
 											>— a real, outward-facing edit to mappings.dbpedia.org; you'll be asked to
 											confirm.</span
 										>
 									</span>
-								</label>
+								</Label>
 
 								<div class="flex justify-end gap-2">
-									<button
-										type="button"
-										class="rounded-lg border border-red-900 px-4 py-2 text-sm text-red-300 hover:bg-red-950/50 disabled:opacity-50"
+									<Button
+										variant="outline"
+										class="border-destructive/40 text-destructive hover:bg-destructive/10"
 										onclick={() => submit(item, 'rejected')}
 										disabled={submitting[item.id]}
 									>
-										{submitting[item.id] ? 'Working…' : 'Reject'}
-									</button>
-									<button
-										type="button"
-										class="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
-										onclick={() => onApproveClick(item)}
-										disabled={submitting[item.id]}
-									>
-										{submitting[item.id]
-											? 'Working…'
-											: publishFlags[item.id]
-												? 'Approve & publish…'
-												: 'Approve'}
-									</button>
+										{#if submitting[item.id]}
+											<LoaderCircleIcon class="animate-spin" />
+										{/if}
+										Reject
+									</Button>
+									<Button onclick={() => onApproveClick(item)} disabled={submitting[item.id]}>
+										{#if submitting[item.id]}
+											<LoaderCircleIcon class="animate-spin" />
+											Working…
+										{:else if publishFlags[item.id]}
+											Approve & publish…
+										{:else}
+											Approve
+										{/if}
+									</Button>
 								</div>
 							</div>
 						{/if}
 					</div>
 				{/if}
-			</li>
+			</Card>
 		{/each}
 	</ul>
 {/if}
 
 {#each items as item (item.id)}
-	{#if confirmPublishFor === item.id && drafts[item.id]}
-		<ConfirmDialog
-			open={true}
-			title="Publish this mapping live?"
-			confirmLabel="Publish"
-			busy={Boolean(submitting[item.id])}
-			onconfirm={() => submit(item, 'approved')}
-			oncancel={() => (confirmPublishFor = null)}
-		>
-			<p>
-				This writes <span class="font-mono text-neutral-300">{item.templateName}</span> to
-				<span class="font-mono text-neutral-300">mappings.dbpedia.org</span> immediately, using a MediaWiki
-				Bot Password — a real edit, not a preview.
-			</p>
-			<ul class="mt-3 space-y-1 rounded-lg border border-neutral-800 bg-neutral-950/60 p-2">
-				{#each drafts[item.id] as row (row.templateProperty)}
-					<li class="font-mono text-xs text-neutral-300">
-						{row.templateProperty} to
-						<span class="text-neutral-100">{row.ontologyProperty}</span>
-					</li>
-				{/each}
-			</ul>
-		</ConfirmDialog>
-	{/if}
+	<AlertDialog.Root
+		open={confirmPublishFor === item.id}
+		onOpenChange={(open) => {
+			if (!open) confirmPublishFor = null;
+		}}
+	>
+		<AlertDialog.Content>
+			<AlertDialog.Header>
+				<AlertDialog.Title>Publish this mapping live?</AlertDialog.Title>
+				<AlertDialog.Description>
+					This writes <span class="font-mono text-foreground">{item.templateName}</span> to
+					<span class="font-mono text-foreground">mappings.dbpedia.org</span> immediately, using a MediaWiki
+					Bot Password — a real edit, not a preview.
+				</AlertDialog.Description>
+			</AlertDialog.Header>
+			{#if drafts[item.id]}
+				<ul class="space-y-1 rounded-lg border bg-muted/40 p-2">
+					{#each drafts[item.id] as row (row.templateProperty)}
+						<li class="font-mono text-xs">
+							{row.templateProperty} to
+							<span class="text-foreground">{row.ontologyProperty}</span>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+			<AlertDialog.Footer>
+				<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+				<AlertDialog.Action
+					disabled={Boolean(submitting[item.id])}
+					onclick={(e) => {
+						e.preventDefault();
+						submit(item, 'approved');
+					}}
+				>
+					{#if submitting[item.id]}
+						<LoaderCircleIcon class="animate-spin" />
+					{/if}
+					Publish
+				</AlertDialog.Action>
+			</AlertDialog.Footer>
+		</AlertDialog.Content>
+	</AlertDialog.Root>
 {/each}

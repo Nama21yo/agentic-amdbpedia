@@ -1,9 +1,27 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { toast } from 'svelte-sonner';
 	import { BackendUnavailableError, findSemanticMatch, previewMapping } from '$lib/api';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
+	import {
+		Table,
+		TableBody,
+		TableCell,
+		TableHead,
+		TableHeader,
+		TableRow
+	} from '$lib/components/ui/table/index.js';
 	import ConfidencePill from '$lib/components/ConfidencePill.svelte';
 	import StepTracker from '$lib/components/StepTracker.svelte';
-	import { pushToast } from '$lib/toast.svelte';
+	import SendIcon from '@lucide/svelte/icons/send-horizontal';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
+	import ArrowRightIcon from '@lucide/svelte/icons/arrow-right';
+	import BotIcon from '@lucide/svelte/icons/bot';
 	import type { AgentStep, ChatMessage, PredictedMapping } from '$lib/types';
 
 	let infobox = $state(`{{Infobox bridge\n| ስም = ...\n| ርዝመት = 1,700 ሜትር\n}}`);
@@ -11,13 +29,11 @@
 	let steps = $state<AgentStep[]>([]);
 	let mappings = $state<PredictedMapping[]>([]);
 	let running = $state(false);
-	let error = $state<string | null>(null);
 	let done = $state(false);
 
 	async function runPreview() {
 		if (!infobox.trim()) return;
 		running = true;
-		error = null;
 		done = false;
 		steps = [];
 		mappings = [];
@@ -31,11 +47,11 @@
 				}
 			}
 		} catch (err) {
-			error =
+			toast.error(
 				err instanceof BackendUnavailableError
 					? 'cross-lingual is not reachable — check that the HTTP server (just run-http) is running.'
-					: 'Unexpected error while running the mapping agent.';
-			pushToast(error, 'error');
+					: 'Unexpected error while running the mapping agent.'
+			);
 		} finally {
 			running = false;
 		}
@@ -70,126 +86,128 @@
 	}
 </script>
 
-<h1 class="mb-1 text-xl font-semibold">Mapping Assistant</h1>
-<p class="mb-6 text-sm text-neutral-400">
-	Paste an Amharic infobox and prepare a draft DBpedia mapping. Nothing here is published until a
-	reviewer approves it — and opts in to publishing — on the
-	<a
-		href={resolve('/review')}
-		class="text-blue-400 underline underline-offset-2 hover:text-blue-300">Review Queue</a
-	>.
-</p>
+<div class="mb-8">
+	<h1 class="text-2xl font-semibold tracking-tight">Mapping Assistant</h1>
+	<p class="mt-1 text-sm text-muted-foreground">
+		Paste an Amharic infobox and prepare a draft DBpedia mapping. Nothing here is published until a
+		reviewer approves it — and opts in to publishing — on the
+		<a href={resolve('/review')} class="text-primary underline underline-offset-4">Review Queue</a>.
+	</p>
+</div>
 
-<div class="grid gap-8 md:grid-cols-2">
-	<section class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-5">
-		<label class="mb-1 block text-sm text-neutral-400" for="infobox">Infobox wikitext</label>
-		<textarea
-			id="infobox"
-			bind:value={infobox}
-			rows="10"
-			class="w-full rounded-lg border border-neutral-800 bg-neutral-950/60 p-3 font-mono text-sm focus:border-blue-700 focus:outline-none"
-		></textarea>
-
-		<label class="mt-4 mb-1 block text-sm text-neutral-400" for="target-class">
-			Target class (optional)
-		</label>
-		<input
-			id="target-class"
-			bind:value={targetClass}
-			placeholder="e.g. Bridge"
-			class="w-full rounded-lg border border-neutral-800 bg-neutral-950/60 p-2 text-sm focus:border-blue-700 focus:outline-none"
-		/>
-
-		<button
-			class="mt-4 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium hover:bg-blue-600 disabled:opacity-50"
-			onclick={runPreview}
-			disabled={running || !infobox.trim()}
-		>
-			{running ? 'Running…' : 'Prepare mapping'}
-		</button>
-
-		{#if error}
-			<p
-				class="mt-4 rounded-lg border border-amber-800 bg-amber-950/40 px-4 py-3 text-sm text-amber-300"
-			>
-				{error}
-			</p>
-		{/if}
-
-		<StepTracker {steps} {running} />
-
-		{#if mappings.length > 0}
-			<div class="mt-6 overflow-x-auto rounded-lg border border-neutral-800">
-				<table class="w-full text-left text-sm">
-					<thead class="bg-neutral-900/80 text-neutral-400">
-						<tr>
-							<th class="px-3 py-2 font-medium">Template property</th>
-							<th class="px-3 py-2 font-medium">Ontology property</th>
-							<th class="px-3 py-2 font-medium">Confidence</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each mappings as mapping (mapping.templateProperty)}
-							<tr class="border-t border-neutral-800">
-								<td class="px-3 py-2 font-mono text-neutral-300">{mapping.templateProperty}</td>
-								<td class="px-3 py-2 font-mono text-neutral-100">{mapping.ontologyProperty}</td>
-								<td class="px-3 py-2"><ConfidencePill confidence={mapping.confidence} /></td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
+<div class="grid gap-6 lg:grid-cols-2">
+	<Card>
+		<CardHeader>
+			<CardTitle>Prepare a mapping</CardTitle>
+		</CardHeader>
+		<CardContent class="flex flex-col gap-4">
+			<div class="flex flex-col gap-1.5">
+				<Label for="infobox">Infobox wikitext</Label>
+				<Textarea id="infobox" bind:value={infobox} rows={10} class="font-mono text-sm" />
 			</div>
-			{#if done}
-				<a
-					href={resolve('/review')}
-					class="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-emerald-800 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-300 hover:bg-emerald-950/70"
-				>
-					Sent to the Review Queue — review and correct it now
-				</a>
-			{/if}
-		{/if}
-	</section>
 
-	<section class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-5">
-		<h2 class="mb-2 text-sm text-neutral-400">Ask the assistant</h2>
-		<p class="mb-3 text-xs text-neutral-600">
-			Quick lookup against the same retrieval index — doesn't submit anything for review.
-		</p>
-		<div
-			class="h-64 space-y-2 overflow-y-auto rounded-lg border border-neutral-800 bg-neutral-950/60 p-3 text-sm"
-		>
-			{#if chatMessages.length === 0}
-				<p class="text-neutral-600">e.g. "what about ቁመት instead?"</p>
+			<div class="flex flex-col gap-1.5">
+				<Label for="target-class">Target class (optional)</Label>
+				<Input id="target-class" bind:value={targetClass} placeholder="e.g. Bridge" />
+			</div>
+
+			<Button onclick={runPreview} disabled={running || !infobox.trim()} class="self-start">
+				{#if running}
+					<LoaderCircleIcon class="animate-spin" />
+					Running…
+				{:else}
+					<SendIcon />
+					Prepare mapping
+				{/if}
+			</Button>
+
+			<StepTracker {steps} {running} />
+
+			{#if mappings.length > 0}
+				<div class="overflow-hidden rounded-lg border">
+					<Table>
+						<TableHeader>
+							<TableRow class="hover:bg-transparent">
+								<TableHead>Template property</TableHead>
+								<TableHead>Ontology property</TableHead>
+								<TableHead>Confidence</TableHead>
+							</TableRow>
+						</TableHeader>
+						<TableBody>
+							{#each mappings as mapping (mapping.templateProperty)}
+								<TableRow>
+									<TableCell class="font-mono">{mapping.templateProperty}</TableCell>
+									<TableCell class="font-mono">{mapping.ontologyProperty}</TableCell>
+									<TableCell><ConfidencePill confidence={mapping.confidence} /></TableCell>
+								</TableRow>
+							{/each}
+						</TableBody>
+					</Table>
+				</div>
+				{#if done}
+					<a
+						href={resolve('/review')}
+						class="flex items-center gap-2 rounded-lg border border-success/40 bg-success/10 px-3 py-2.5 text-sm font-medium text-success"
+					>
+						<CircleCheckIcon class="size-4 shrink-0" />
+						Sent to the Review Queue — review and correct it now
+						<ArrowRightIcon class="size-4 shrink-0" />
+					</a>
+				{/if}
 			{/if}
-			{#each chatMessages as message, i (i)}
-				<p class={message.role === 'user' ? 'text-neutral-100' : 'text-emerald-400'}>
-					<span class="text-neutral-500">{message.role === 'user' ? 'you' : 'assistant'}:</span>
-					{message.content}
-				</p>
-			{/each}
-			{#if chatBusy}
-				<p class="text-neutral-500">assistant: …</p>
-			{/if}
-		</div>
-		<form
-			class="mt-2 flex gap-2"
-			onsubmit={(event) => {
-				event.preventDefault();
-				askAssistant();
-			}}
-		>
-			<input
-				bind:value={chatInput}
-				placeholder="e.g. what about ቁመት instead?"
-				class="flex-1 rounded-lg border border-neutral-800 bg-neutral-950/60 p-2 text-sm focus:border-blue-700 focus:outline-none"
-			/>
-			<button
-				type="submit"
-				disabled={chatBusy || !chatInput.trim()}
-				class="rounded-lg bg-neutral-800 px-3 py-2 text-sm hover:bg-neutral-700 disabled:opacity-50"
+		</CardContent>
+	</Card>
+
+	<Card class="flex flex-col">
+		<CardHeader>
+			<CardTitle>Ask the assistant</CardTitle>
+			<p class="text-xs text-muted-foreground">
+				Quick lookup against the same retrieval index — doesn't submit anything for review.
+			</p>
+		</CardHeader>
+		<CardContent class="flex flex-1 flex-col gap-3">
+			<div class="flex h-72 flex-col gap-3 overflow-y-auto rounded-lg border bg-muted/30 p-3">
+				{#if chatMessages.length === 0}
+					<div
+						class="m-auto flex flex-col items-center gap-2 text-center text-sm text-muted-foreground"
+					>
+						<BotIcon class="size-8 opacity-40" />
+						<p>e.g. "what about ቁመት instead?"</p>
+					</div>
+				{/if}
+				{#each chatMessages as message, i (i)}
+					<div class={message.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
+						<div
+							class={message.role === 'user'
+								? 'max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-sm text-primary-foreground'
+								: 'max-w-[85%] rounded-2xl rounded-bl-sm border bg-background px-3 py-2 text-sm'}
+						>
+							{message.content}
+						</div>
+					</div>
+				{/each}
+				{#if chatBusy}
+					<div class="flex justify-start">
+						<div
+							class="flex items-center gap-1.5 rounded-2xl rounded-bl-sm border bg-background px-3 py-2"
+						>
+							<LoaderCircleIcon class="size-3.5 animate-spin text-muted-foreground" />
+						</div>
+					</div>
+				{/if}
+			</div>
+			<form
+				class="flex gap-2"
+				onsubmit={(event) => {
+					event.preventDefault();
+					askAssistant();
+				}}
 			>
-				Ask
-			</button>
-		</form>
-	</section>
+				<Input bind:value={chatInput} placeholder="e.g. what about ቁመት instead?" class="flex-1" />
+				<Button type="submit" size="icon" disabled={chatBusy || !chatInput.trim()}>
+					<SendIcon class="size-4" />
+				</Button>
+			</form>
+		</CardContent>
+	</Card>
 </div>

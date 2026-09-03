@@ -3,10 +3,11 @@
 The web UI for the "prepare a mapping for this infobox" workflow: SvelteKit 5
 
 - TypeScript + Tailwind v4, scaffolded with `sv create` and installed with
-  pnpm. Not built from, but structurally inspired by, `vercel/ai-chatbot-svelte`
-  — its streaming-chat shape, without the Vercel-specific pieces (Postgres/Neon
-  chat history, Blob storage, provider-routed AI SDK calls) that don't apply
-  here.
+  pnpm. Not built from, but structurally _and visually_ inspired by
+  `vercel/ai-chatbot-svelte` — its streaming-chat shape and shadcn-svelte
+  design language, without the Vercel-specific pieces (Postgres/Neon chat
+  history, Blob storage, provider-routed AI SDK calls, auth) that don't
+  apply here.
 
 ## What's real vs. planned
 
@@ -40,7 +41,7 @@ mapping agent's predictions, not just accepts or rejects them blindly:
   (`src/lib/components/MappingEditor.svelte`). An edited row is diff
   -highlighted against the model's original prediction, with a one-click
   reset back to it.
-- Each row has a **🔍 suggest** panel that calls the same
+- Each row has a **suggest** panel that calls the same
   `find_semantic_match` retrieval endpoint the chat panel uses, so a
   correction is picked from real grounded candidates instead of freehand
   -typed (and possibly misspelled) — consistent with the rest of this
@@ -65,13 +66,22 @@ or real auth once that becomes a problem, not before.
 
 ## Component library
 
-Hand-built Tailwind, not shadcn-svelte/Bits UI. `ai-chatbot-svelte` uses
-those; wiring up the shadcn-svelte CLI is a reasonable follow-up if the team
-wants that exact look, but wasn't pulled in for this starter to keep the
-first commit small. Small pieces used across more than one screen are
-still extracted into `src/lib/components/` (`StatusBadge`, `ConfidencePill`,
-`StepTracker`, `MappingEditor`, `ConfirmDialog`, `Toaster`) rather than
-copy-pasted per page.
+Uses the same stack `ai-chatbot-svelte` does: **shadcn-svelte** primitives
+(`src/lib/components/ui/*` — button, input, textarea, label, card, badge,
+table, checkbox, separator, tooltip, alert-dialog, skeleton, sonner) built
+on **Bits UI**, styled with Tailwind v4's CSS-variable theme
+(`src/routes/layout.css`, "new-york" style, neutral base color) plus
+**`mode-watcher`** for a real light/dark toggle and **`@lucide/svelte`**
+for icons. The shadcn-svelte CLI's newer `init` flow requires an
+interactive TTY to pick a design-system preset (confirmed: piped stdin is
+ignored outright, so it can't be scripted) — these files were hand-authored
+to match its actual generated output instead of fought into working
+non-interactively; `pnpm dlx shadcn-svelte@latest add <name>` should still
+work against `components.json` for adding more.
+
+App-specific composites live one level up in `src/lib/components/`
+(`AppSidebar`, `ModeToggle`, `StatusBadge`, `ConfidencePill`, `StepTracker`,
+`MappingEditor`) rather than copy-pasted per page.
 
 ## Running it
 

@@ -1,13 +1,14 @@
 <script lang="ts">
 	import type { ReviewStatus } from '$lib/types';
+	import { Badge, type BadgeVariant } from '$lib/components/ui/badge/index.js';
 
 	let { status }: { status: ReviewStatus } = $props();
 
-	const styles: Record<ReviewStatus, string> = {
-		pending_review: 'border-amber-800 bg-amber-950/50 text-amber-300',
-		approved: 'border-emerald-800 bg-emerald-950/50 text-emerald-300',
-		rejected: 'border-red-800 bg-red-950/50 text-red-300',
-		published: 'border-sky-800 bg-sky-950/50 text-sky-300'
+	const variants: Record<ReviewStatus, BadgeVariant> = {
+		pending_review: 'warning',
+		approved: 'success',
+		rejected: 'destructive',
+		published: 'default'
 	};
 
 	const labels: Record<ReviewStatus, string> = {
@@ -18,11 +19,4 @@
 	};
 </script>
 
-<span
-	class={[
-		'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap',
-		styles[status]
-	]}
->
-	{labels[status]}
-</span>
+<Badge variant={variants[status]}>{labels[status]}</Badge>

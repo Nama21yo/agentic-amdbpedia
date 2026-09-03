@@ -1,6 +1,10 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { BackendUnavailableError, getCoverageStats } from '$lib/api';
 	import type { CoverageStats } from '$lib/types';
+	import { Card, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card/index.js';
+	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
+	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 
 	let stats = $state<CoverageStats | null>(null);
 	let error = $state<string | null>(null);
@@ -16,37 +20,48 @@
 		}
 	}
 
-	load();
+	onMount(load);
 </script>
 
-<h1 class="mb-1 text-xl font-semibold">Extraction Coverage</h1>
-<p class="mb-6 text-sm text-neutral-400">
-	How much of Amharic Wikipedia's infobox data has a validated DBpedia mapping.
-</p>
+<div class="mb-8">
+	<h1 class="text-2xl font-semibold tracking-tight">Extraction Coverage</h1>
+	<p class="mt-1 text-sm text-muted-foreground">
+		How much of Amharic Wikipedia's infobox data has a validated DBpedia mapping.
+	</p>
+</div>
 
 {#if error}
-	<p class="rounded-lg border border-amber-800 bg-amber-950/40 px-4 py-3 text-sm text-amber-300">
+	<div
+		class="flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning-foreground"
+	>
+		<TriangleAlertIcon class="size-4 shrink-0" />
 		{error}
-	</p>
+	</div>
 {:else if !stats}
 	<div class="grid grid-cols-3 gap-4">
-		<div class="h-20 animate-pulse rounded-xl border border-neutral-800 bg-neutral-900/40"></div>
-		<div class="h-20 animate-pulse rounded-xl border border-neutral-800 bg-neutral-900/40"></div>
-		<div class="h-20 animate-pulse rounded-xl border border-neutral-800 bg-neutral-900/40"></div>
+		<Skeleton class="h-24 w-full" />
+		<Skeleton class="h-24 w-full" />
+		<Skeleton class="h-24 w-full" />
 	</div>
 {:else}
-	<dl class="grid grid-cols-3 gap-4">
-		<div class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4">
-			<dt class="text-sm text-neutral-400">Templates</dt>
-			<dd class="text-2xl font-semibold tabular-nums">{stats.totalTemplates}</dd>
-		</div>
-		<div class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4">
-			<dt class="text-sm text-neutral-400">Mapped</dt>
-			<dd class="text-2xl font-semibold tabular-nums">{stats.mappedTemplates}</dd>
-		</div>
-		<div class="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4">
-			<dt class="text-sm text-neutral-400">Coverage</dt>
-			<dd class="text-2xl font-semibold tabular-nums">{stats.coveragePercent.toFixed(1)}%</dd>
-		</div>
-	</dl>
+	<div class="grid grid-cols-3 gap-4">
+		<Card>
+			<CardHeader>
+				<CardDescription>Templates</CardDescription>
+				<CardTitle class="text-2xl tabular-nums">{stats.totalTemplates}</CardTitle>
+			</CardHeader>
+		</Card>
+		<Card>
+			<CardHeader>
+				<CardDescription>Mapped</CardDescription>
+				<CardTitle class="text-2xl tabular-nums">{stats.mappedTemplates}</CardTitle>
+			</CardHeader>
+		</Card>
+		<Card>
+			<CardHeader>
+				<CardDescription>Coverage</CardDescription>
+				<CardTitle class="text-2xl tabular-nums">{stats.coveragePercent.toFixed(1)}%</CardTitle>
+			</CardHeader>
+		</Card>
+	</div>
 {/if}

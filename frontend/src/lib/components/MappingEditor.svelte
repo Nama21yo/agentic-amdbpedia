@@ -1,7 +1,23 @@
 <script lang="ts">
 	import { BackendUnavailableError, findSemanticMatch } from '$lib/api';
 	import type { MappingCandidate, PredictedMapping } from '$lib/types';
+	import { cn } from '$lib/utils.js';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import {
+		Table,
+		TableBody,
+		TableCell,
+		TableHead,
+		TableHeader,
+		TableRow
+	} from '$lib/components/ui/table/index.js';
 	import ConfidencePill from './ConfidencePill.svelte';
+	import SearchIcon from '@lucide/svelte/icons/search';
+	import Trash2Icon from '@lucide/svelte/icons/trash-2';
+	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 
 	let {
 		mappings = $bindable(),
@@ -105,72 +121,71 @@
 	}
 </script>
 
-<div class="overflow-x-auto rounded-lg border border-neutral-800">
-	<table class="w-full text-left text-sm">
-		<thead class="bg-neutral-900/80 text-neutral-400">
-			<tr>
-				<th class="px-3 py-2 font-medium">Template property</th>
-				<th class="px-3 py-2 font-medium">Ontology property</th>
-				<th class="px-3 py-2 font-medium">Confidence</th>
+<div class="overflow-hidden rounded-lg border">
+	<Table>
+		<TableHeader>
+			<TableRow class="hover:bg-transparent">
+				<TableHead>Template property</TableHead>
+				<TableHead>Ontology property</TableHead>
+				<TableHead>Confidence</TableHead>
 				{#if !readonly}
-					<th class="px-3 py-2 font-medium"><span class="sr-only">Actions</span></th>
+					<TableHead class="w-10"><span class="sr-only">Actions</span></TableHead>
 				{/if}
-			</tr>
-		</thead>
-		<tbody>
+			</TableRow>
+		</TableHeader>
+		<TableBody>
 			{#each mappings as row, index (index)}
-				<tr class="border-t border-neutral-800 align-top">
-					<td class="px-3 py-2 font-mono text-neutral-300">
+				<TableRow class="align-top">
+					<TableCell class="font-mono">
 						{#if readonly}
 							{row.templateProperty}
 						{:else}
-							<input
-								bind:value={row.templateProperty}
-								class="w-full rounded border border-transparent bg-transparent px-1 py-0.5 font-mono focus:border-neutral-700 focus:bg-neutral-900 focus:outline-none"
-							/>
+							<Input bind:value={row.templateProperty} class="h-8 font-mono" />
 						{/if}
-					</td>
-					<td class="px-3 py-2">
+					</TableCell>
+					<TableCell class="whitespace-normal">
 						{#if readonly}
-							<span class="font-mono text-neutral-200">{row.ontologyProperty}</span>
+							<span class="font-mono">{row.ontologyProperty}</span>
 						{:else}
 							<div class="flex items-center gap-1.5">
-								<input
+								<Input
 									value={row.ontologyProperty}
 									oninput={(e) => applyOntologyEdit(index, e.currentTarget.value)}
-									class={[
-										'w-full rounded border bg-neutral-950/60 px-2 py-1 font-mono text-neutral-100 focus:border-blue-700 focus:outline-none',
-										isEdited(row) ? 'border-amber-700' : 'border-neutral-800'
-									]}
+									class={cn(
+										'h-8 font-mono',
+										isEdited(row) && 'border-warning focus-visible:ring-warning/40'
+									)}
 								/>
-								<button
-									type="button"
-									class="shrink-0 rounded border border-neutral-800 px-2 py-1 text-xs text-neutral-400 hover:border-neutral-600 hover:text-neutral-200"
+								<Button
+									variant="outline"
+									size="icon"
+									class="size-8 shrink-0"
 									onclick={() => openSuggest(index)}
 									title="Search real ontology candidates"
 								>
-									Suggest
-								</button>
+									<SearchIcon class="size-3.5" />
+								</Button>
 							</div>
 							{#if isEdited(row)}
-								<span class="mt-1 inline-flex items-center gap-1 text-xs text-amber-500">
-									edited from <span class="font-mono"
+								<p class="mt-1 flex items-center gap-1 text-xs text-warning">
+									edited from
+									<span class="font-mono"
 										>{originalFor(row.templateProperty)?.ontologyProperty}</span
 									>
 									<button
 										type="button"
-										class="underline hover:text-amber-300"
+										class="underline underline-offset-2 hover:no-underline"
 										onclick={() => resetRow(index)}
 									>
 										reset
 									</button>
-								</span>
+								</p>
 							{:else if isNew(row)}
-								<span class="mt-1 inline-block text-xs text-blue-400">added by reviewer</span>
+								<p class="mt-1 text-xs text-primary">added by reviewer</p>
 							{/if}
 
 							{#if suggestOpenIndex === index}
-								<div class="mt-2 rounded-lg border border-neutral-800 bg-neutral-950 p-2">
+								<div class="mt-2 rounded-lg border bg-muted/40 p-2">
 									<form
 										class="flex gap-1.5"
 										onsubmit={(e) => {
@@ -178,34 +193,34 @@
 											runSuggest();
 										}}
 									>
-										<input
+										<Input
 											bind:value={suggestQuery}
 											placeholder="Amharic field or English hint"
-											class="flex-1 rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-xs"
+											class="h-7 text-xs"
 										/>
-										<button
-											type="submit"
-											class="rounded bg-neutral-800 px-2 py-1 text-xs hover:bg-neutral-700"
-											disabled={suggestLoading}
-										>
-											{suggestLoading ? '…' : 'Search'}
-										</button>
+										<Button type="submit" size="sm" class="h-7" disabled={suggestLoading}>
+											{#if suggestLoading}
+												<LoaderCircleIcon class="size-3.5 animate-spin" />
+											{:else}
+												Search
+											{/if}
+										</Button>
 									</form>
 									{#if suggestError}
-										<p class="mt-1.5 text-xs text-amber-400">{suggestError}</p>
+										<p class="mt-1.5 text-xs text-warning">{suggestError}</p>
 									{:else if suggestResults && suggestResults.length === 0}
-										<p class="mt-1.5 text-xs text-neutral-500">No confident match found.</p>
+										<p class="mt-1.5 text-xs text-muted-foreground">No confident match found.</p>
 									{:else if suggestResults}
 										<ul class="mt-1.5 flex flex-wrap gap-1.5">
 											{#each suggestResults as candidate (candidate.property)}
 												<li>
 													<button
 														type="button"
-														class="rounded-full border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 hover:border-blue-600 hover:text-blue-300"
+														class="rounded-full border px-2 py-1 text-xs hover:border-primary hover:text-primary"
 														onclick={() => applySuggestion(index, candidate)}
 													>
 														<span class="font-mono">{candidate.property}</span>
-														<span class="text-neutral-500">
+														<span class="text-muted-foreground">
 															{Math.round(candidate.score * 100)}%
 														</span>
 													</button>
@@ -216,68 +231,72 @@
 								</div>
 							{/if}
 						{/if}
-					</td>
-					<td class="px-3 py-2">
+					</TableCell>
+					<TableCell>
 						<ConfidencePill confidence={row.confidence} />
-					</td>
+					</TableCell>
 					{#if !readonly}
-						<td class="px-3 py-2 text-right">
-							<button
-								type="button"
-								class="rounded border border-neutral-800 px-2 py-1 text-xs text-neutral-500 hover:border-red-800 hover:text-red-400"
+						<TableCell>
+							<Button
+								variant="ghost"
+								size="icon"
+								class="size-8 text-muted-foreground hover:text-destructive"
 								onclick={() => removeRow(index)}
 								title="Remove this mapping"
 							>
-								Remove
-							</button>
-						</td>
+								<Trash2Icon class="size-3.5" />
+							</Button>
+						</TableCell>
 					{/if}
-				</tr>
+				</TableRow>
 			{/each}
 
 			{#if !readonly}
-				<tr class="border-t border-neutral-800 bg-neutral-900/40">
-					<td class="px-3 py-2">
-						<input
+				<TableRow class="bg-muted/30 hover:bg-muted/30">
+					<TableCell>
+						<Input
 							bind:value={newTemplateProperty}
 							placeholder="new template property"
-							class="w-full rounded border border-dashed border-neutral-800 bg-transparent px-2 py-1 font-mono text-xs placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none"
+							class="h-8 border-dashed font-mono text-xs"
 						/>
-					</td>
-					<td class="px-3 py-2">
-						<input
+					</TableCell>
+					<TableCell>
+						<Input
 							bind:value={newOntologyProperty}
 							placeholder="new ontology property"
-							class="w-full rounded border border-dashed border-neutral-800 bg-transparent px-2 py-1 font-mono text-xs placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none"
+							class="h-8 border-dashed font-mono text-xs"
 						/>
-					</td>
-					<td class="px-3 py-2 text-xs text-neutral-600">—</td>
-					<td class="px-3 py-2 text-right">
-						<button
-							type="button"
-							class="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-800 disabled:opacity-40"
+					</TableCell>
+					<TableCell class="text-xs text-muted-foreground">—</TableCell>
+					<TableCell>
+						<Button
+							variant="outline"
+							size="sm"
+							class="h-8"
 							disabled={!newTemplateProperty.trim() || !newOntologyProperty.trim()}
 							onclick={addRow}
 						>
-							+ Add
-						</button>
-					</td>
-				</tr>
+							<PlusIcon class="size-3.5" />
+							Add
+						</Button>
+					</TableCell>
+				</TableRow>
 			{/if}
-		</tbody>
-	</table>
+		</TableBody>
+	</Table>
 </div>
 
 {#if !readonly && removedOriginals.length > 0}
-	<div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+	<div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
 		<span>Removed from the model's prediction:</span>
 		{#each removedOriginals as row (row.templateProperty)}
 			<button
 				type="button"
-				class="rounded-full border border-neutral-800 px-2 py-1 font-mono text-neutral-400 hover:border-neutral-600 hover:text-neutral-200"
+				class="flex items-center gap-1 rounded-full border px-2 py-1 font-mono hover:border-foreground/40 hover:text-foreground"
 				onclick={() => restoreRow(row)}
 			>
-				Restore: {row.templateProperty} to {row.ontologyProperty}
+				<RotateCcwIcon class="size-3" />
+				{row.templateProperty} to {row.ontologyProperty}
 			</button>
 		{/each}
 	</div>
