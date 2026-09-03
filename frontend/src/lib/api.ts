@@ -1,10 +1,10 @@
-// Typed client for the two backends this frontend calls. Every endpoint here
-// is documented with its contract; each function is labeled PLANNED or
-// EXISTING in its own doc comment. Each function fails closed with
-// BackendUnavailableError rather than throwing an opaque network error, so
-// callers can render an honest "not connected yet" state instead of a
-// crash.
-import { AGENTIC_DBPEDIA_URL, CROSS_LINGUAL_URL } from './config';
+// Typed client for the cross-lingual HTTP API -- the only backend this
+// frontend calls. Every endpoint here is documented with its contract; each
+// function is labeled PLANNED or EXISTING in its own doc comment. Each
+// function fails closed with BackendUnavailableError rather than throwing an
+// opaque network error, so callers can render an honest "not connected yet"
+// state instead of a crash.
+import { CROSS_LINGUAL_URL } from './config';
 import type {
 	AgentStep,
 	CoverageStats,
@@ -158,9 +158,20 @@ export async function decideReview(
 	return res.json();
 }
 
-/** EXISTING on the backend already (agentic-dbpedia's statistics service). */
+/**
+ * EXISTING: GET {CROSS_LINGUAL_URL}/v1/coverage (mcp_server/http_app.py).
+ *
+ * Was originally pointed at agentic-dbpedia's `/api/statistics/summary` --
+ * that endpoint never actually existed there (its real routes are
+ * `/api/statistics/latest`/`generate`/`runs`, and even those compute a
+ * different thing: raw DEF extraction-output triple counts). Repointed at
+ * cross-lingual's own review queue, for the same reason every other
+ * endpoint here already lives there: agentic-dbpedia is DEF-extraction
+ * -only. See `db/session.py::coverage_stats`'s docstring for exactly what
+ * "coverage" means computed this way.
+ */
 export async function getCoverageStats(): Promise<CoverageStats> {
-	const res = await safeFetch(`${AGENTIC_DBPEDIA_URL}/api/statistics/summary`);
+	const res = await safeFetch(`${CROSS_LINGUAL_URL}/v1/coverage`);
 	if (!res.ok) throw new BackendUnavailableError(`statistics failed: ${res.status}`);
 	return res.json();
 }

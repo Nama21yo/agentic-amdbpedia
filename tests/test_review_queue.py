@@ -14,6 +14,7 @@ from starlette.testclient import TestClient
 from db.session import (
     InvalidReviewStatusError,
     ReviewNotFoundError,
+    coverage_stats,
     create_review_item,
     get_review_item,
     init_models,
@@ -155,6 +156,62 @@ async def test_set_review_status_transitions_and_persists(engine: AsyncEngine) -
     assert refetched.status == "approved"
 
 
+@pytest.mark.asyncio
+async def test_coverage_stats_on_an_empty_queue(engine: AsyncEngine) -> None:
+    factory = session_factory(engine)
+    async with factory() as session:
+        stats = await coverage_stats(session)
+
+    assert stats == {
+        "total_templates": 0,
+        "mapped_templates": 0,
+        "coverage_percent": 0.0,
+        "last_run_at": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_coverage_stats_counts_distinct_templates_and_only_published_as_mapped(
+    engine: AsyncEngine,
+) -> None:
+    factory = session_factory(engine)
+    async with factory() as session:
+        # Two rows share "Infobox airport" -- still one distinct template.
+        published = await create_review_item(
+            session,
+            run_id="r1",
+            template_name="Infobox airport",
+            domain_class="Airport",
+            mappings=[],
+        )
+        await create_review_item(
+            session,
+            run_id="r2",
+            template_name="Infobox airport",
+            domain_class="Airport",
+            mappings=[],
+        )
+        # approved (not published) shouldn't count as mapped.
+        await create_review_item(
+            session, run_id="r3", template_name="Infobox bridge", domain_class="Bridge", mappings=[]
+        )
+        rejected = await create_review_item(
+            session, run_id="r4", template_name="Infobox dam", domain_class="Dam", mappings=[]
+        )
+
+    async with factory() as session:
+        await set_review_status(session, published.id, "published")
+        await set_review_status(session, rejected.id, "rejected")
+
+    async with factory() as session:
+        stats = await coverage_stats(session)
+
+    assert stats["total_templates"] == 3  # airport, bridge, dam
+    assert stats["mapped_templates"] == 1  # only airport has a published row
+    assert stats["coverage_percent"] == pytest.approx(33.3)
+    assert stats["last_run_at"] is not None
+
+
 def test_post_v1_reviews_creates_a_row_and_returns_frontend_shaped_json() -> None:
     app = _make_app()
 
@@ -217,6 +274,48 @@ def test_get_v1_reviews_lists_created_items() -> None:
         items = response.json()
         assert len(items) == 1
         assert items[0]["templateName"] == "A"
+
+
+def test_get_v1_coverage_reflects_published_rows_only() -> None:
+    app = _make_app(
+        publish_func=lambda template_name, domain_class, mappings: f"Mapping am:{template_name}",
+        refresh_mappings_func=lambda: 0,
+    )
+
+    with TestClient(app) as client:
+        empty = client.get("/v1/coverage")
+        assert empty.status_code == 200
+        assert empty.json() == {
+            "totalTemplates": 0,
+            "mappedTemplates": 0,
+            "coveragePercent": 0.0,
+            "lastRunAt": None,
+        }
+
+        created = client.post(
+            "/v1/reviews",
+            json={
+                "run_id": "run-1",
+                "template_name": "Infobox airport",
+                "domain_class": "Airport",
+                "mappings": SAMPLE_MAPPINGS,
+            },
+        ).json()
+
+        still_pending = client.get("/v1/coverage").json()
+        assert still_pending["totalTemplates"] == 1
+        assert still_pending["mappedTemplates"] == 0
+
+        client.post(
+            f"/v1/reviews/{created['id']}/decision",
+            json={"decision": "approved", "publish": True},
+        )
+
+        after_publish = client.get("/v1/coverage").json()
+        assert after_publish["totalTemplates"] == 1
+        assert after_publish["mappedTemplates"] == 1
+        assert after_publish["coveragePercent"] == 100.0
+        assert after_publish["lastRunAt"] is not None
 
 
 def test_get_v1_reviews_by_id_returns_404_for_missing_review() -> None:

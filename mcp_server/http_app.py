@@ -36,6 +36,7 @@ from db.models import ReviewItem
 from db.session import (
     InvalidReviewStatusError,
     ReviewNotFoundError,
+    coverage_stats,
     create_engine,
     create_review_item,
     get_review_item,
@@ -124,6 +125,28 @@ async def list_reviews(request: Request) -> JSONResponse:
                 return _error_response(exc, 400)
 
         return JSONResponse([item.to_api_dict() for item in items])
+
+
+async def coverage(request: Request) -> JSONResponse:
+    """`frontend/src/lib/api.ts::getCoverageStats` (refs
+    frontend/src/lib/types.ts::CoverageStats) -- computed from this repo's
+    own review queue, not agentic-dbpedia. See db.session.coverage_stats's
+    docstring for why, and for exactly what "coverage" means here.
+    """
+
+    with correlation_context():
+        factory = _session_factory_from_state(request)
+        async with factory() as session:
+            stats = await coverage_stats(session)
+
+        return JSONResponse(
+            {
+                "totalTemplates": stats["total_templates"],
+                "mappedTemplates": stats["mapped_templates"],
+                "coveragePercent": stats["coverage_percent"],
+                "lastRunAt": stats["last_run_at"],
+            }
+        )
 
 
 async def get_review(request: Request) -> JSONResponse:
@@ -327,6 +350,7 @@ routes = [
     Route("/v1/reviews/{review_id}/decision", decide_review, methods=["POST"]),
     Route("/v1/preview", preview_mapping, methods=["POST"]),
     Route("/v1/find-semantic-match", find_semantic_match, methods=["POST"]),
+    Route("/v1/coverage", coverage, methods=["GET"]),
 ]
 
 

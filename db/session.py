@@ -12,7 +12,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -105,6 +105,43 @@ async def get_review_item(session: AsyncSession, review_id: str) -> ReviewItem:
     if item is None:
         raise ReviewNotFoundError(review_id)
     return item
+
+
+async def coverage_stats(session: AsyncSession) -> dict[str, Any]:
+    """Template-mapping coverage computed entirely from this repo's own
+    review queue -- no dependency on agentic-dbpedia (whose
+    `/api/statistics/summary` the frontend previously called never
+    actually existed there; its real routes are `/api/statistics/latest`
+    /`generate`/`runs`, and even those compute a different thing: raw DEF
+    extraction-output triple counts, which is squarely an
+    extraction-framework concern, not this repo's).
+
+    `totalTemplates` is every distinct infobox template this repo's own
+    pipeline has ever run (`ReviewItem.template_name`); `mappedTemplates`
+    is however many of those have at least one row that reached
+    "published" -- a real, live mapping, not just a pending prediction.
+    Deliberately not "every infobox template that exists on Amharic
+    Wikipedia" -- this repo has no independent way to enumerate that
+    without either agentic-dbpedia's DEF-based crawl or a wiki-wide
+    MediaWiki API sweep neither of which is this endpoint's job.
+    """
+
+    total = await session.scalar(select(func.count(func.distinct(ReviewItem.template_name))))
+    mapped = await session.scalar(
+        select(func.count(func.distinct(ReviewItem.template_name))).where(
+            ReviewItem.status == "published"
+        )
+    )
+    last_run_at = await session.scalar(select(func.max(ReviewItem.submitted_at)))
+
+    total = total or 0
+    mapped = mapped or 0
+    return {
+        "total_templates": total,
+        "mapped_templates": mapped,
+        "coverage_percent": round(mapped / total * 100, 1) if total else 0.0,
+        "last_run_at": last_run_at.isoformat() if last_run_at else None,
+    }
 
 
 async def set_review_status(session: AsyncSession, review_id: str, status: str) -> ReviewItem:

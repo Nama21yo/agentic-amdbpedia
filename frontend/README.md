@@ -11,25 +11,26 @@ The web UI for the "prepare a mapping for this infobox" workflow: SvelteKit 5
 
 ## What's real vs. planned
 
-The UI, routing, and API client are real and functional. As of
-implementation.md Phase 2 Milestone 16, every `cross-lingual`-side endpoint
-this frontend calls now exists on the real backend
+The UI, routing, and API client are real and functional, and every endpoint
+this frontend calls lives on `cross-lingual`'s own backend
 (`mcp_server/http_app.py`, run with `uvicorn mcp_server.http_app:app`
-alongside the MCP stdio server) — only `getCoverageStats`, which talks to
-`agentic-dbpedia`'s own statistics service, remains unconfirmed against
-this client. Each API function in `src/lib/api.ts` is still labeled
-`PLANNED` or `EXISTING` in its doc comment for whichever endpoints haven't
-caught up yet. A screen whose endpoint isn't reachable fails closed into a
-visible "not reachable yet" message instead of crashing or showing fake
-data — that's intentional, not a bug to fix later.
+alongside the MCP stdio server) — this frontend has no remaining dependency
+on `agentic-dbpedia` at all. `getCoverageStats` used to call
+`agentic-dbpedia`'s `/api/statistics/summary`, an endpoint that (found live)
+never actually existed there; it's since moved to `GET
+{CROSS_LINGUAL_URL}/v1/coverage`, computed from this repo's own review
+queue (`db/session.py::coverage_stats`) rather than depending on a
+DEF-extraction-output crawl. A screen whose endpoint isn't reachable fails
+closed into a visible "not reachable yet" message instead of crashing or
+showing fake data — that's intentional, not a bug to fix later.
 
-| Screen                       | Calls                                           | Status                                                                             |
-| ---------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Mapping Assistant (`/`)      | `cross-lingual` `POST /v1/preview` (SSE)        | **Exists** — `mcp_server/http_app.py`, refs implementation.md 16.3                 |
-| Mapping Assistant chat panel | `cross-lingual` `/v1/find-semantic-match`       | **Exists** — refs implementation.md 16.3                                           |
-| Review Queue (`/review`)     | `cross-lingual` `GET /v1/reviews`               | **Exists** — `mcp_server/http_app.py`, refs implementation.md 14.1                 |
-| Review Queue (`/review`)     | `cross-lingual` `POST /v1/reviews/:id/decision` | **Exists** — refs implementation.md 14.2/14.3 (correction + publish support)       |
-| Coverage (`/coverage`)       | `agentic-dbpedia` `/api/statistics/summary`     | Backend route exists already; response shape not yet confirmed against this client |
+| Screen                       | Calls                                           | Status                                                                       |
+| ---------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------- |
+| Mapping Assistant (`/`)      | `cross-lingual` `POST /v1/preview` (SSE)        | **Exists** — `mcp_server/http_app.py`, refs implementation.md 16.3           |
+| Mapping Assistant chat panel | `cross-lingual` `/v1/find-semantic-match`       | **Exists** — refs implementation.md 16.3                                     |
+| Review Queue (`/review`)     | `cross-lingual` `GET /v1/reviews`               | **Exists** — `mcp_server/http_app.py`, refs implementation.md 14.1           |
+| Review Queue (`/review`)     | `cross-lingual` `POST /v1/reviews/:id/decision` | **Exists** — refs implementation.md 14.2/14.3 (correction + publish support) |
+| Coverage (`/coverage`)       | `cross-lingual` `GET /v1/coverage`              | **Exists** — `mcp_server/http_app.py` + `db/session.py::coverage_stats`      |
 
 ## Human-in-the-loop review
 
@@ -87,7 +88,7 @@ App-specific composites live one level up in `src/lib/components/`
 
 ```bash
 pnpm install
-cp .env.example .env   # point at your local backends, or leave the defaults
+cp .env.example .env   # point at your local backend, or leave the default
 pnpm run dev --open
 ```
 

@@ -15,7 +15,7 @@
 		} catch (err) {
 			error =
 				err instanceof BackendUnavailableError
-					? 'agentic-dbpedia is not reachable yet — this populates once /api/statistics/summary is running.'
+					? 'cross-lingual is not reachable — check that the HTTP server (just run-http) is running.'
 					: 'Unexpected error while loading coverage stats.';
 		}
 	}
@@ -26,7 +26,8 @@
 <div class="mb-8">
 	<h1 class="text-2xl font-semibold tracking-tight">Extraction Coverage</h1>
 	<p class="mt-1 text-sm text-muted-foreground">
-		How much of Amharic Wikipedia's infobox data has a validated DBpedia mapping.
+		Of the infobox templates this pipeline has processed, how many have a mapping actually published
+		to the live wiki.
 	</p>
 </div>
 
