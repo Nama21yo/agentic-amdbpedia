@@ -207,6 +207,20 @@ for deterministic XML with no LLM in the loop; and
 numbers. `examples/demo.md` has full worked transcripts for these,
 including the prompt-injection guardrail path.
 
+**Pre-populating chat history before a demo**: `frontend/scripts/
+seed-demo-chat-history.browser.js` seeds the sidebar with ~9 realistic
+sessions (real, live-verified inputs/outputs — no fabricated data)
+spread across Today/Yesterday/Previous 7 days/Older, so a demo doesn't
+have to start from an empty sidebar or build up recency grouping live.
+Paste its contents into the browser's devtools console once, on the
+page you'll demo from, then refresh — it merges with whatever's
+already there rather than overwriting it. It's browser-console-only
+(writes to `localStorage`, not a backend), and every seeded pipeline
+result already has a resolved approve/reject/publish status so nothing
+in the seeded history has a live Approve/Reject button wired to a
+review-queue id that doesn't really exist — demo that flow live with a
+fresh submission instead.
+
 ## Development
 
 ```bash
