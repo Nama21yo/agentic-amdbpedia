@@ -4,7 +4,9 @@ implementation.md 14.1/14.2/16.3).
 A separate Starlette ASGI app from `mcp_server/server.py`'s stdio-based
 FastMCP tool interface — this is the general HTTP surface
 `frontend/src/lib/api.ts` and `agentic-dbpedia`'s pipeline actually call.
-Run it with `uvicorn mcp_server.http_app:app`.
+Run it with `uvicorn mcp_server.http_app:create_app --factory` (refs the
+`create_app` docstring below for why this is a factory, not a bare
+module-level `app` object).
 
 Every response the frontend reads matches `frontend/src/lib/types.ts`'s
 shapes field-for-field (camelCase) via `ReviewItem.to_api_dict()` — not
@@ -414,4 +416,17 @@ def create_app(
     return app
 
 
-app = create_app()
+# Deliberately NOT `app = create_app()` at module level. Confirmed live:
+# create_engine(settings=None) -> resolve_database_url() -> Settings()
+# validates every required field (GROQ_API_KEY has no default -- see its
+# own comment in config.py for why that's intentional) the instant this
+# module is *imported*, not merely when the server actually starts. Every
+# test here imports `create_app` and calls it explicitly with an injected
+# engine/settings, so nothing in this codebase actually needs a
+# pre-built module-level `app` -- but `uvicorn mcp_server.http_app:app`
+# did, and that forced any environment without a real GROQ_API_KEY set
+# (a CI unit-test job that has no business needing one) to fail at
+# collection time just from importing this file, before a single test
+# even ran. `uvicorn ... --factory` calls `create_app()` itself, lazily,
+# only when the server actually starts -- exactly where a real
+# environment (which does have GROQ_API_KEY) is expected to exist.

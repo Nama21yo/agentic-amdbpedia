@@ -24,7 +24,7 @@ run-server:
     uv run --frozen --no-dev --python 3.11 python mcp_server/server.py
 
 run-http:
-    uv run --frozen --no-dev --python 3.11 uvicorn mcp_server.http_app:app --port 8001
+    uv run --frozen --no-dev --python 3.11 uvicorn mcp_server.http_app:create_app --factory --port 8001
 
 validate-corpus:
     uv run --frozen --no-dev --python 3.11 python scripts/validate_corpus.py data

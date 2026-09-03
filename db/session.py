@@ -46,9 +46,9 @@ def resolve_database_url(settings: Settings | None = None) -> str:
     """`settings.database_url` if given, else read `Settings()` for real
     (env vars / `.env`) -- **not** `config.DEFAULT_DATABASE_URL` directly.
 
-    Found live: `mcp_server/http_app.py`'s module-level `app = create_app()`
-    -- the actual object `uvicorn mcp_server.http_app:app` (and so `just
-    run-http`) serves -- calls this with `settings=None`. The previous
+    Found live: `mcp_server/http_app.py::create_app()` -- what `uvicorn
+    mcp_server.http_app:create_app --factory` (and so `just run-http`)
+    serves -- calls this with `settings=None`. The previous
     version of this function returned the hardcoded SQLite default
     whenever `settings` was `None`, completely bypassing `Settings`'s own
     env-file loading -- so `just run-http` silently used local SQLite
