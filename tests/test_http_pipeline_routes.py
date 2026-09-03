@@ -89,7 +89,7 @@ def test_preview_streams_one_event_per_node_and_a_final_result(
         assert "timestamp" in step_event
 
 
-def test_preview_rejects_a_request_with_no_infobox_field() -> None:
+def test_preview_rejects_a_request_with_neither_infobox_nor_url() -> None:
     app = _in_memory_app()
 
     with TestClient(app) as client:
@@ -191,3 +191,78 @@ def test_cross_origin_preflight_succeeds_for_the_frontends_own_origin() -> None:
         assert response.status_code == 200
         assert response.headers["access-control-allow-origin"] == "*"
         assert "POST" in response.headers["access-control-allow-methods"]
+
+
+def test_preview_accepts_a_wikipedia_url_and_fetches_it_before_the_pipeline_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("mcp_server.pipeline.predict_property", _fake_predict_property)
+    captured: dict[str, str] = {}
+
+    def fake_fetch_article(url: str) -> tuple[str, str]:
+        captured["url"] = url
+        return "ድልድይ ምሳሌ", BRIDGE_WIKITEXT
+
+    app = _in_memory_app(fetch_article_func=fake_fetch_article)
+
+    with (
+        TestClient(app) as client,
+        client.stream(
+            "POST",
+            "/v1/preview",
+            json={"url": "https://am.wikipedia.org/wiki/ድልድይ_ምሳሌ", "target_class": "Bridge"},
+        ) as response,
+    ):
+        assert response.status_code == 200
+        body = "".join(response.iter_text())
+
+    assert captured["url"] == "https://am.wikipedia.org/wiki/ድልድይ_ምሳሌ"
+    events = _parse_sse_events(body)
+    node_names = [event["node"] for event in events]
+    # The fetch happens as its own reported step, ahead of the same
+    # extract -> predict -> format -> persist sequence a plain `infobox`
+    # request already goes through -- fetching a whole article is meant
+    # to be a drop-in alternative source, not a different pipeline.
+    assert node_names == [
+        "fetch_source_article",
+        "extract_infobox_fields",
+        "predict_properties",
+        "format_mapping_syntax",
+        "persist_review_item",
+        "result",
+    ]
+    assert events[0]["status"] == "done"
+    assert "ድልድይ ምሳሌ" in str(events[0]["detail"])
+    assert events[-1]["mappings"] == [
+        {"templateProperty": "ርዝመት", "ontologyProperty": "length", "confidence": 1.0}
+    ]
+
+
+def test_preview_reports_a_failed_wikipedia_fetch_as_an_error_step_not_a_500(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from mcp_server.wiki_fetch import WikipediaFetchError
+
+    def failing_fetch_article(url: str) -> tuple[str, str]:
+        raise WikipediaFetchError(f"Could not reach {url}: HTTP 404: Not Found")
+
+    app = _in_memory_app(fetch_article_func=failing_fetch_article)
+
+    with (
+        TestClient(app) as client,
+        client.stream(
+            "POST",
+            "/v1/preview",
+            json={"url": "https://am.wikipedia.org/wiki/DoesNotExist", "target_class": "Bridge"},
+        ) as response,
+    ):
+        # SSE already started; the fetch failure is an event, not a status code.
+        assert response.status_code == 200
+        body = "".join(response.iter_text())
+
+    events = _parse_sse_events(body)
+    assert [event["node"] for event in events] == ["fetch_source_article", "result"]
+    assert events[0]["status"] == "error"
+    assert "404" in str(events[0]["detail"])
+    assert events[1]["mappings"] == []
+    assert events[1]["reviewItemId"] is None

@@ -18,6 +18,7 @@ doc comments becomes `EXISTING`.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator, Callable
@@ -53,6 +54,7 @@ from mcp_server.consent import ConsentRequiredError, require_consent
 from mcp_server.pipeline import stream_mapping_pipeline
 from mcp_server.publish import PublishError, publish_mapping
 from mcp_server.server import find_semantic_match_impl
+from mcp_server.wiki_fetch import WikipediaFetchError, fetch_article_wikitext
 from rag.retrieval import search as default_search
 from rag.training_log import DEFAULT_LOG_PATH, log_decision
 from scripts.refresh_wiki_cache import refresh_mappings
@@ -71,6 +73,7 @@ DEFAULT_PREVIEW_DOMAIN_CLASS = "Thing"
 PublishFunc = Callable[..., str]
 RefreshMappingsFunc = Callable[..., int]
 SearchFunc = Callable[..., Any]
+FetchArticleFunc = Callable[..., tuple[str, str]]
 
 
 def _error_response(error: ClientSafeError, status_code: int) -> JSONResponse:
@@ -290,9 +293,19 @@ async def decide_review(request: Request) -> JSONResponse:
 async def preview_mapping(request: Request) -> Response:
     """SSE stream of the mapping pipeline's progress (refs 16.3), matching
     `frontend/src/lib/api.ts::previewMapping`'s contract exactly: `POST
-    {infobox, target_class?}`, response `text/event-stream` with one JSON
-    -encoded `data:` line per pipeline node (16.2's `stream_mapping_pipeline`)
-    and a final `{"node": "result", "mappings": [...]}` event.
+    {infobox, target_class?}` **or** `POST {url, target_class?}`, response
+    `text/event-stream` with one JSON-encoded `data:` line per pipeline
+    node (16.2's `stream_mapping_pipeline`) and a final `{"node": "result",
+    "mappings": [...]}` event.
+
+    `url` is a real Wikipedia article link (`mcp_server.wiki_fetch`) --
+    fetching its wikitext happens *before* `stream_mapping_pipeline`
+    starts, reported as its own `fetch_source_article` SSE event, then the
+    fetched wikitext runs through the exact same pipeline `infobox` would.
+    `extract_first_infobox` already finds "the first infobox-like
+    template" within arbitrarily larger wikitext, so handing it a whole
+    article is enough -- no need for this endpoint to special-case
+    extracting "just the infobox part" itself.
     """
 
     with correlation_context():
@@ -302,20 +315,59 @@ async def preview_mapping(request: Request) -> Response:
             return _error_response(AssistantValidationError("Request body must be valid JSON"), 400)
 
         infobox = body.get("infobox") if isinstance(body, dict) else None
-        if not infobox:
-            return _error_response(AssistantValidationError("Missing required field: infobox"), 400)
+        url = body.get("url") if isinstance(body, dict) else None
+        if not infobox and not url:
+            return _error_response(
+                AssistantValidationError("Missing required field: infobox or url"), 400
+            )
 
         domain_class = body.get("target_class") or DEFAULT_PREVIEW_DOMAIN_CLASS
         factory = _session_factory_from_state(request)
+        fetch_article_func: FetchArticleFunc = request.app.state.fetch_article_func
+
+        def _sse(event: dict[str, Any]) -> bytes:
+            return f"data: {json.dumps(event, ensure_ascii=False)}\n\n".encode()
 
         async def event_stream() -> AsyncIterator[bytes]:
+            # `infobox` is only ever unset here when `url` is set instead
+            # (the validation above rejects both being empty) -- `or ""`
+            # is purely to satisfy mypy that this is a `str`, not
+            # `str | None`; the `if url:` branch below always overwrites
+            # it before it would matter otherwise.
+            wikitext: str = infobox or ""
+            if url:
+                try:
+                    title, wikitext = await asyncio.to_thread(fetch_article_func, url)
+                except WikipediaFetchError as exc:
+                    log_event(LOGGER, "http.preview_fetch_failed", error=str(exc))
+                    yield _sse(
+                        {"node": "fetch_source_article", "status": "error", "detail": str(exc)}
+                    )
+                    yield _sse(
+                        {
+                            "node": "result",
+                            "mappings": [],
+                            "mappingWikitext": "",
+                            "xmlRules": "",
+                            "reviewItemId": None,
+                        }
+                    )
+                    return
+                yield _sse(
+                    {
+                        "node": "fetch_source_article",
+                        "status": "done",
+                        "detail": f'Fetched "{title}" from Wikipedia',
+                    }
+                )
+
             async with factory() as session:
                 async for event in stream_mapping_pipeline(
-                    infobox, domain_class=domain_class, session=session
+                    wikitext, domain_class=domain_class, session=session
                 ):
-                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n".encode()
+                    yield _sse(event)
 
-        log_event(LOGGER, "http.preview_started", domain_class=domain_class)
+        log_event(LOGGER, "http.preview_started", domain_class=domain_class, from_url=bool(url))
         return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
@@ -364,17 +416,20 @@ def create_app(
     publish_func: PublishFunc = publish_mapping,
     refresh_mappings_func: RefreshMappingsFunc = refresh_mappings,
     search_func: SearchFunc = default_search,
+    fetch_article_func: FetchArticleFunc = fetch_article_wikitext,
 ) -> Starlette:
     """Build the app with a fresh engine/session factory in app.state, so
     tests can inject an isolated (e.g. in-memory SQLite) engine and/or an
     isolated training-log path instead of the real configured ones.
 
-    `publish_func`/`refresh_mappings_func` default to the real
-    mcp_server.publish.publish_mapping / scripts.refresh_wiki_cache.refresh_mappings
-    — tests always inject fakes for both, since the real ones perform a
-    live, irreversible MediaWiki write and a real network fetch
-    respectively. `search_func` defaults to the real rag.retrieval.search —
-    tests inject a fake to avoid the real embedding-model-backed index.
+    `publish_func`/`refresh_mappings_func`/`fetch_article_func` default to
+    the real mcp_server.publish.publish_mapping /
+    scripts.refresh_wiki_cache.refresh_mappings /
+    mcp_server.wiki_fetch.fetch_article_wikitext — tests always inject
+    fakes for all three, since the real ones perform a live, irreversible
+    MediaWiki write and real network fetches respectively. `search_func`
+    defaults to the real rag.retrieval.search — tests inject a fake to
+    avoid the real embedding-model-backed index.
     """
 
     resolved_engine = engine or create_engine(settings=settings)
@@ -413,6 +468,7 @@ def create_app(
     app.state.publish_func = publish_func
     app.state.refresh_mappings_func = refresh_mappings_func
     app.state.search_func = search_func
+    app.state.fetch_article_func = fetch_article_func
     return app
 
 

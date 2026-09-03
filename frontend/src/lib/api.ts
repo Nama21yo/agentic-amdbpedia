@@ -11,7 +11,8 @@ import type {
 	MappingCandidate,
 	MappingSyntax,
 	PredictedMapping,
-	ReviewItem
+	ReviewItem,
+	ReviewStatus
 } from './types';
 
 export class BackendUnavailableError extends Error {}
@@ -50,10 +51,28 @@ type PreviewEvent =
 	| ({ node: 'result'; mappings: PredictedMapping[]; reviewItemId: string | null } & MappingSyntax);
 
 /**
+ * True for a real `wikipedia.org` article link (any language edition) --
+ * shared with `frontend/src/routes/+page.svelte` so "does this input go
+ * through the URL-fetch path" is decided in exactly one place, matching
+ * `mcp_server/wiki_fetch.py::parse_article_url`'s own host check.
+ */
+export function looksLikeWikipediaUrl(text: string): boolean {
+	try {
+		const url = new URL(text.trim());
+		return /^([a-z0-9-]+\.)?wikipedia\.org$/i.test(url.hostname);
+	} catch {
+		return false;
+	}
+}
+
+/**
  * EXISTING: POST {CROSS_LINGUAL_URL}/v1/preview — text/event-stream
  * (mcp_server/http_app.py, refs implementation.md 16.3). Streams the
- * mapping pipeline's (16.2) progress for a pasted infobox. Each SSE
- * `data:` line is one JSON-encoded step; the final event carries
+ * mapping pipeline's (16.2) progress for a pasted infobox **or** a real
+ * Wikipedia article link (`mcp_server/wiki_fetch.py` fetches its wikitext
+ * server-side first, reported as its own `fetch_source_article` step,
+ * before the same extract → predict → format → persist sequence runs).
+ * Each SSE `data:` line is one JSON-encoded step; the final event carries
  * `node: "result"` with the predicted mappings. `targetClass` defaults to
  * `"Thing"` server-side when omitted.
  *
@@ -63,13 +82,16 @@ type PreviewEvent =
  * the same reason 14.1 already repointed `listReviewQueue`/`decideReview`.
  */
 export async function* previewMapping(
-	infobox: string,
+	source: string,
 	targetClass?: string
 ): AsyncGenerator<PreviewEvent> {
+	const body = looksLikeWikipediaUrl(source)
+		? { url: source.trim(), target_class: targetClass }
+		: { infobox: source, target_class: targetClass };
 	const res = await safeFetch(`${CROSS_LINGUAL_URL}/v1/preview`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ infobox, target_class: targetClass })
+		body: JSON.stringify(body)
 	});
 	if (!res.ok || !res.body) {
 		throw new BackendUnavailableError(`preview failed: ${res.status}`);
@@ -111,13 +133,20 @@ export async function findSemanticMatch(
 }
 
 /**
- * EXISTING: GET {CROSS_LINGUAL_URL}/v1/reviews — the Postgres-backed queue
- * (mcp_server/http_app.py, refs implementation.md 14.1). Run it with
+ * EXISTING: GET {CROSS_LINGUAL_URL}/v1/reviews[?status=] — the
+ * Postgres-backed queue (mcp_server/http_app.py, refs implementation.md
+ * 14.1; the `status` filter was always supported server-side via
+ * `list_reviews`'s own `request.query_params.get("status")` but never
+ * exposed here until AppSidebar needed a pending-review count without
+ * pulling the entire queue just to filter it client-side). Run it with
  * `uvicorn mcp_server.http_app:create_app --factory` alongside the MCP
  * stdio server.
  */
-export async function listReviewQueue(): Promise<ReviewItem[]> {
-	const res = await safeFetch(`${CROSS_LINGUAL_URL}/v1/reviews`);
+export async function listReviewQueue(status?: ReviewStatus): Promise<ReviewItem[]> {
+	const url = status
+		? `${CROSS_LINGUAL_URL}/v1/reviews?status=${encodeURIComponent(status)}`
+		: `${CROSS_LINGUAL_URL}/v1/reviews`;
+	const res = await safeFetch(url);
 	if (!res.ok) throw new BackendUnavailableError(`reviews failed: ${res.status}`);
 	return res.json();
 }

@@ -6,6 +6,7 @@
 	let { steps }: { steps: AgentStep[] } = $props();
 
 	const stepLabels: Record<string, string> = {
+		fetch_source_article: 'Fetch Wikipedia article',
 		extract_infobox_fields: 'Extract infobox fields',
 		predict_properties: 'Predict ontology properties',
 		format_mapping_syntax: 'Generate mapping XML',

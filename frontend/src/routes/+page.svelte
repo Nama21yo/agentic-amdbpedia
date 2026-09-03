@@ -5,6 +5,7 @@
 		DecisionFailedError,
 		decideReview,
 		findSemanticMatch,
+		looksLikeWikipediaUrl,
 		previewMapping
 	} from '$lib/api';
 	import {
@@ -51,6 +52,16 @@
 		return /\{\{\s*infobox/i.test(text) || text.trim().startsWith('{{');
 	}
 
+	// A Wikipedia link runs the exact same extract → predict → format →
+	// persist pipeline as a pasted infobox -- the backend just fetches the
+	// article's wikitext first (mcp_server/wiki_fetch.py) and hands it to
+	// the same extract_first_infobox() call, which already finds "the
+	// first infobox-like template" in arbitrarily larger wikitext. So this
+	// only needs to decide routing, not build a third turn kind.
+	function runsThePipeline(text: string): boolean {
+		return looksLikeInfobox(text) || looksLikeWikipediaUrl(text);
+	}
+
 	function scrollToBottom() {
 		requestAnimationFrame(() => scrollAnchor?.scrollIntoView({ behavior: 'smooth', block: 'end' }));
 	}
@@ -65,7 +76,7 @@
 		const id = crypto.randomUUID();
 		const wantsClass = targetClass.trim() || undefined;
 
-		if (looksLikeInfobox(value)) {
+		if (runsThePipeline(value)) {
 			session.turns.push({
 				id,
 				kind: 'pipeline',
@@ -201,7 +212,11 @@
 			label: 'Paste an infobox to map',
 			value: `{{Infobox bridge\n| ስም = ደደሳ ድልድይ\n| ርዝመት = 1,700 ሜትር\n}}`
 		},
-		{ label: 'Ask what a field maps to', value: 'አይካኦ_ኮድ' }
+		{ label: 'Ask what a field maps to', value: 'አይካኦ_ኮድ' },
+		{
+			label: 'Or a Wikipedia link',
+			value: 'https://am.wikipedia.org/wiki/ታላቁ_የኢትዮጵያ_ሕዳሴ_ግድብ'
+		}
 	];
 </script>
 
@@ -213,7 +228,7 @@
 				<div>
 					<h1 class="text-2xl font-semibold tracking-tight">Amharic → DBpedia Mapping Assistant</h1>
 					<p class="mt-2 text-sm text-muted-foreground">
-						Paste an infobox to prepare a draft mapping, or ask about a single field. Nothing is
+						Paste an infobox, a Wikipedia article link, or ask about a single field. Nothing is
 						published until a reviewer approves it on the
 						<a href={resolve('/review')} class="text-primary underline underline-offset-4"
 							>Review Queue</a
@@ -250,7 +265,11 @@
 					<div class="flex flex-col gap-3">
 						{#if turn.kind === 'pipeline'}
 							{#if turn.running && turn.steps.length === 0}
-								<ThinkingIndicator label="Extracting and predicting" />
+								<ThinkingIndicator
+									label={looksLikeWikipediaUrl(turn.input)
+										? 'Fetching the article'
+										: 'Extracting and predicting'}
+								/>
 							{/if}
 							<StepTracker steps={turn.steps} />
 							{#if turn.mappings && turn.mappings.length > 0}
@@ -402,7 +421,7 @@
 				<Textarea
 					bind:value={input}
 					onkeydown={onKeydown}
-					placeholder="Paste an infobox, or ask about a field…"
+					placeholder="Paste an infobox, a Wikipedia link, or ask about a field…"
 					rows={1}
 					class="max-h-48 min-h-9 resize-none border-none bg-transparent px-2 py-1.5 shadow-none focus-visible:ring-0"
 				/>

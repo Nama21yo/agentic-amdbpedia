@@ -26,8 +26,10 @@ describe('chat history reactivity (reproducing the reported sidebar bug)', () =>
 	it('shows a newly created session in the rendered sidebar without a reload', async () => {
 		render(AppSidebar, { props: { open: true } });
 
-		// Before any chat: no "Chats" section at all.
-		expect(screen.queryByText('Chats')).toBeNull();
+		// Before any chat: no recency group ("Today"/etc.) and no search
+		// box -- both are gated on sessions.length > 0.
+		expect(screen.queryByText('Today')).toBeNull();
+		expect(screen.queryByPlaceholderText('Search chats…')).toBeNull();
 
 		// Reproduce exactly what +page.svelte's submit() does for the first
 		// message of a conversation.
@@ -44,9 +46,9 @@ describe('chat history reactivity (reproducing the reported sidebar bug)', () =>
 		touchSession(session.id);
 		await tick();
 
-		// The sidebar should now show a "Chats" section with this session's
-		// derived title, with no remount / no reload.
-		expect(screen.getByText('Chats')).toBeInTheDocument();
+		// The sidebar should now group this session under "Today" (it was
+		// just touched) with its derived title, with no remount / no reload.
+		expect(screen.getByText('Today')).toBeInTheDocument();
 		expect(screen.getByText(/Infobox bridge/)).toBeInTheDocument();
 	});
 
