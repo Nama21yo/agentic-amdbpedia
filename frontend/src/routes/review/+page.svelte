@@ -49,6 +49,13 @@
 		// DataCloneError (confirmed live). $state.snapshot() is Svelte's own
 		// API for exactly this: a plain, disconnected, JSON-safe deep copy.
 		if (!drafts[item.id]) drafts[item.id] = $state.snapshot(item.mappings);
+		// publishFlags starts as an empty Record, so publishFlags[item.id] is
+		// `undefined` until touched -- Checkbox declares `checked =
+		// $bindable(false)` with an explicit fallback, and Svelte 5 refuses
+		// to `bind:checked` an explicit `undefined` against a bindable that
+		// has one (confirmed live: props_invalid_value). Seeding a real
+		// `false` here, alongside the draft, avoids ever binding undefined.
+		if (publishFlags[item.id] === undefined) publishFlags[item.id] = false;
 	}
 
 	async function load() {
