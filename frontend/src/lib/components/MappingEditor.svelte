@@ -145,11 +145,11 @@
 								/>
 								<button
 									type="button"
-									class="shrink-0 rounded border border-neutral-800 px-1.5 py-1 text-xs text-neutral-400 hover:border-neutral-600 hover:text-neutral-200"
+									class="shrink-0 rounded border border-neutral-800 px-2 py-1 text-xs text-neutral-400 hover:border-neutral-600 hover:text-neutral-200"
 									onclick={() => openSuggest(index)}
 									title="Search real ontology candidates"
 								>
-									🔍
+									Suggest
 								</button>
 							</div>
 							{#if isEdited(row)}
@@ -224,11 +224,11 @@
 						<td class="px-3 py-2 text-right">
 							<button
 								type="button"
-								class="rounded border border-neutral-800 px-1.5 py-1 text-xs text-neutral-500 hover:border-red-800 hover:text-red-400"
+								class="rounded border border-neutral-800 px-2 py-1 text-xs text-neutral-500 hover:border-red-800 hover:text-red-400"
 								onclick={() => removeRow(index)}
 								title="Remove this mapping"
 							>
-								✕
+								Remove
 							</button>
 						</td>
 					{/if}
@@ -277,7 +277,7 @@
 				class="rounded-full border border-neutral-800 px-2 py-1 font-mono text-neutral-400 hover:border-neutral-600 hover:text-neutral-200"
 				onclick={() => restoreRow(row)}
 			>
-				↺ {row.templateProperty} → {row.ontologyProperty}
+				Restore: {row.templateProperty} to {row.ontologyProperty}
 			</button>
 		{/each}
 	</div>

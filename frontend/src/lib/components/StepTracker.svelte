@@ -19,28 +19,23 @@
 				<span class="flex flex-col items-center">
 					<span
 						class={[
-							'flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold',
+							'h-2.5 w-2.5 shrink-0 rounded-full',
 							step.status === 'error'
-								? 'bg-red-700 text-white'
+								? 'bg-red-600'
 								: step.status === 'done'
-									? 'bg-emerald-700 text-white'
-									: 'animate-pulse bg-blue-700 text-white'
+									? 'bg-emerald-600'
+									: 'animate-pulse bg-blue-600'
 						]}
-					>
-						{#if step.status === 'error'}
-							✕
-						{:else if step.status === 'done'}
-							✓
-						{:else}
-							⋯
-						{/if}
-					</span>
+					></span>
 					{#if !isLast}
 						<span class="mt-1 h-6 w-px bg-neutral-800"></span>
 					{/if}
 				</span>
 				<div class="pt-px text-sm">
-					<p class="text-neutral-200">{stepLabels[step.node] ?? step.node}</p>
+					<p class="text-neutral-200">
+						{stepLabels[step.node] ?? step.node}
+						<span class="text-xs text-neutral-500">({step.status})</span>
+					</p>
 					{#if step.detail}
 						<p class="text-xs text-neutral-500">{step.detail}</p>
 					{/if}

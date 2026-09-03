@@ -22,9 +22,8 @@
 				type="button"
 				class="text-xs text-neutral-500 hover:text-neutral-300"
 				onclick={() => dismissToast(toast.id)}
-				aria-label="Dismiss"
 			>
-				✕
+				Dismiss
 			</button>
 		</div>
 	{/each}

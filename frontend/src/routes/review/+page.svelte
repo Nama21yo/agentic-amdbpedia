@@ -143,7 +143,7 @@
 		onclick={load}
 		disabled={loading}
 	>
-		{loading ? 'Refreshing…' : '↻ Refresh'}
+		{loading ? 'Refreshing…' : 'Refresh'}
 	</button>
 </div>
 
@@ -195,7 +195,7 @@
 					onclick={() => toggleExpanded(item)}
 				>
 					<div class="flex items-center gap-3">
-						<span class="text-neutral-600">{isOpen ? '▾' : '▸'}</span>
+						<span class="w-3 text-neutral-600">{isOpen ? '-' : '+'}</span>
 						<div>
 							<p class="text-sm font-medium text-neutral-100">{item.templateName}</p>
 							<p class="text-xs text-neutral-500">
@@ -298,7 +298,8 @@
 			<ul class="mt-3 space-y-1 rounded-lg border border-neutral-800 bg-neutral-950/60 p-2">
 				{#each drafts[item.id] as row (row.templateProperty)}
 					<li class="font-mono text-xs text-neutral-300">
-						{row.templateProperty} → <span class="text-neutral-100">{row.ontologyProperty}</span>
+						{row.templateProperty} to
+						<span class="text-neutral-100">{row.ontologyProperty}</span>
 					</li>
 				{/each}
 			</ul>

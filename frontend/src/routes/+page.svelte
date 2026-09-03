@@ -144,7 +144,7 @@
 					href={resolve('/review')}
 					class="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-emerald-800 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-300 hover:bg-emerald-950/70"
 				>
-					✓ Sent to the Review Queue — review and correct it now →
+					Sent to the Review Queue — review and correct it now
 				</a>
 			{/if}
 		{/if}
