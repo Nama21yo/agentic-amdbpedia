@@ -270,7 +270,7 @@ Prepare four terminal tabs, two browser tabs, and one editor window.
 ### Terminal 1: environment, corpus, and index
 
 ~~~bash
-cd /home/matania/Desktop/dbpedia/cross-lingual
+cd /home/matania/Desktop/dbpedia/agentic-amdbpedia
 uv sync --frozen
 just validate-corpus
 ~~~
@@ -294,7 +294,7 @@ Keep this tab ready for the live agent trace shown later.
 Prepare:
 
 ~~~bash
-cd /home/matania/Desktop/dbpedia/cross-lingual
+cd /home/matania/Desktop/dbpedia/agentic-amdbpedia
 just test
 just lint
 just test-integration
@@ -314,7 +314,7 @@ integration tests passed (real embedding models, real Postgres, real Docker/Tent
 ### Terminal 4: the HTTP pipeline server
 
 ~~~bash
-cd /home/matania/Desktop/dbpedia/cross-lingual
+cd /home/matania/Desktop/dbpedia/agentic-amdbpedia
 docker compose up -d postgres   # optional -- skip to use local SQLite instead
 just run-http
 ~~~
@@ -449,7 +449,7 @@ orchestration and grounding enforcement.
 In Terminal 2, run:
 
 ~~~bash
-cd /home/matania/Desktop/dbpedia/cross-lingual
+cd /home/matania/Desktop/dbpedia/agentic-amdbpedia
 uv run python - <<'PY'
 from mcp_server.agent import GroqClient, run_mapping_agent
 
