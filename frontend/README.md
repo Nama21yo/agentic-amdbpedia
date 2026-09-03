@@ -101,4 +101,9 @@ pnpm run dev --open
 ```
 
 `pnpm run check` runs `svelte-check`; `pnpm run lint` / `pnpm run format`
-wrap prettier + eslint, both already configured by `sv create`.
+wrap prettier + eslint, both already configured by `sv create`. `pnpm run
+test` runs Vitest (`@testing-library/svelte` + jsdom) for actual component
+-level reactivity tests -- `src/lib/chat-history.test.ts` mounts
+`AppSidebar.svelte` for real and drives the chat-history store to prove the
+sidebar's "Chats" list genuinely updates live, not just that the store
+functions run without throwing.
