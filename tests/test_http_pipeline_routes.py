@@ -163,3 +163,27 @@ def test_find_semantic_match_route_rejects_missing_amharic_property() -> None:
 
         assert response.status_code == 400
         assert response.json()["error_type"] == "validation"
+
+
+def test_cross_origin_preflight_succeeds_for_the_frontends_own_origin() -> None:
+    """The frontend (localhost:5173 in dev) calls this API (localhost:8001)
+    with fetch() directly from the browser -- a different origin -- so
+    every non-GET request is CORS-preflighted first. Confirmed live: without
+    CORS middleware this OPTIONS request 405s, the browser never sends the
+    real POST, and frontend/src/lib/api.ts's safeFetch() sees that as an
+    opaque network failure indistinguishable from the server being down."""
+    app = _in_memory_app()
+
+    with TestClient(app) as client:
+        response = client.options(
+            "/v1/preview",
+            headers={
+                "Origin": "http://localhost:5173",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == "*"
+        assert "POST" in response.headers["access-control-allow-methods"]

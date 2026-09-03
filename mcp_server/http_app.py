@@ -25,6 +25,8 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from starlette.applications import Starlette
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
@@ -356,7 +358,29 @@ def create_app(
         await init_models(resolved_engine)
         yield
 
-    app = Starlette(routes=routes, lifespan=lifespan)
+    # frontend/ (SvelteKit, served from a different origin -- e.g.
+    # localhost:5173 -- than this app's own localhost:8001) calls this API
+    # with fetch() directly from the browser, not from its own backend, so
+    # every non-GET request is CORS-preflighted. Without this, the browser
+    # never even sends the real POST -- it fails the OPTIONS preflight with
+    # a 405 first and safeFetch() in frontend/src/lib/api.ts sees that as
+    # an opaque network failure indistinguishable from the server being
+    # down entirely (confirmed live: this is exactly what "cross-lingual is
+    # not reachable" meant with a server that was actually up and healthy).
+    # No cookies/auth headers are ever sent (frontend/README.md's Auth
+    # section -- deliberately deferred for this internal tool), so a
+    # wildcard origin is safe: there's no credential a third-party origin
+    # could ride along with a forged request.
+    middleware = [
+        Middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    ]
+
+    app = Starlette(routes=routes, lifespan=lifespan, middleware=middleware)
     app.state.engine = resolved_engine
     app.state.training_log_path = training_log_path or DEFAULT_LOG_PATH
     app.state.session_factory = session_factory(resolved_engine)
