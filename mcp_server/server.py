@@ -66,6 +66,27 @@ class MappingPayload(BaseModel):
         return value
 
 
+# Force these two schemas to build now, using this module's own current
+# globals(), rather than lazily on first real use. `uv run mcp dev
+# mcp_server/server.py` loads this file via
+# importlib.util.spec_from_file_location(...) + exec_module(...) without
+# ever registering the resulting module in sys.modules (a real bug in the
+# mcp SDK's CLI, confirmed directly against a minimal repro of that exact
+# loader sequence) -- pydantic's automatic forward-ref resolution for
+# `mappings: list[MappingEntry]` needs `sys.modules[cls.__module__]` to
+# find `MappingEntry` and silently defers instead, so FastMCP's tool
+# registration for generate_mapping_syntax(payload: MappingPayload) later
+# blows up with "MappingEntry is not fully defined". `model_rebuild()`
+# resolves via the *calling frame's* globals instead of sys.modules, which
+# still contains MappingEntry regardless of that missing registration.
+# `python -m mcp_server.server` (what tests/integration/test_mcp_protocol.py
+# actually uses) doesn't hit this at all -- a normal import always
+# registers sys.modules correctly -- which is exactly why this went
+# unnoticed until someone ran the literal `mcp dev` CLI command.
+MappingEntry.model_rebuild()
+MappingPayload.model_rebuild()
+
+
 def configure_logging() -> None:
     configure_json_logging()
 
