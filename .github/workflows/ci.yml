@@ -41,6 +41,28 @@ jobs:
 
   integration-test:
     runs-on: ubuntu-latest
+    # tests/test_review_queue.py::test_review_queue_works_against_a_real_postgres_instance
+    # hardcodes localhost:5435 with docker-compose.yml's own credentials --
+    # deliberately verifying against real Postgres, not just SQLite (its own
+    # docstring: they can silently disagree on JSON column handling). This
+    # job never provisioned that Postgres, so this test failed on every CI
+    # run that reached it (confirmed live via `gh run view --log-failed`);
+    # a GitHub Actions service container is the same shape docker-compose
+    # already uses, so it's the same instance the test already expects.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: mapping_assistant
+          POSTGRES_PASSWORD: mapping_assistant
+          POSTGRES_DB: mapping_assistant
+        ports:
+          - "5435:5432"
+        options: >-
+          --health-cmd "pg_isready -U mapping_assistant -d mapping_assistant"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 6
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
