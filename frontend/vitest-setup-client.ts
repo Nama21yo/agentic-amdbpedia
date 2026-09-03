@@ -8,6 +8,8 @@ vi.mock('$app/environment', () => ({
 	version: 'test'
 }));
 
+vi.mock('$env/dynamic/public', () => ({ env: {} }));
+
 // localStorage isn't implemented by jsdom by default in a way that
 // survives between imports of the same module in one test file the way a
 // real browser's would -- a tiny in-memory polyfill is enough for what
@@ -30,4 +32,9 @@ class MemoryStorage {
 
 if (!('localStorage' in globalThis) || !globalThis.localStorage) {
 	Object.defineProperty(globalThis, 'localStorage', { value: new MemoryStorage() });
+}
+
+// jsdom doesn't implement scrollIntoView at all.
+if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+	Element.prototype.scrollIntoView = () => {};
 }

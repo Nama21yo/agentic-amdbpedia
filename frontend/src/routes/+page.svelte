@@ -52,7 +52,7 @@
 		const wantsClass = targetClass.trim() || undefined;
 
 		if (looksLikeInfobox(value)) {
-			const turn: PipelineTurn = {
+			session.turns.push({
 				id,
 				kind: 'pipeline',
 				input: value,
@@ -60,8 +60,20 @@
 				steps: [],
 				mappings: null,
 				running: true
-			};
-			session.turns.push(turn);
+			});
+			// `session` is an element of the `sessions` $state array, and
+			// Svelte 5 wraps a plain object in its own reactive proxy the
+			// moment it's inserted into a $state container -- that proxy,
+			// not the object literal above, is what the template actually
+			// reads. Re-reading the just-pushed element by reference here
+			// (rather than continuing to mutate the object literal) is what
+			// makes every mutation below actually reach the DOM; mutating
+			// the pre-push literal directly is silently invisible to Svelte
+			// (confirmed live: the "Thinking…" indicator never clears,
+			// steps/mappings never appear, because turn.steps/turn.mappings
+			// assignments were landing on a detached object nothing was
+			// still watching).
+			const turn = session.turns[session.turns.length - 1] as PipelineTurn;
 			touchSession(session.id);
 			scrollToBottom();
 			try {
@@ -84,7 +96,7 @@
 				touchSession(session.id);
 			}
 		} else {
-			const turn: AnswerTurn = {
+			session.turns.push({
 				id,
 				kind: 'answer',
 				input: value,
@@ -92,8 +104,10 @@
 				matches: null,
 				noMatch: false,
 				running: true
-			};
-			session.turns.push(turn);
+			});
+			// See the comment above the pipeline branch's push -- same fix,
+			// same reason.
+			const turn = session.turns[session.turns.length - 1] as AnswerTurn;
 			touchSession(session.id);
 			scrollToBottom();
 			try {
