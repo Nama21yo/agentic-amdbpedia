@@ -1,5 +1,5 @@
 [project]
-name = "cross-lingual-knowledge-assistant"
+name = "agentic-amdbpedia"
 version = "0.1.0"
 description = "Amharic-to-English DBpedia ontology mapping assistant using hybrid RAG and MCP."
 readme = "README.md"

@@ -64,7 +64,7 @@ def http_get(url: str, params: dict[str, str], *, timeout: float = DEFAULT_TIMEO
     query = urllib.parse.urlencode(params)
     request = urllib.request.Request(
         f"{url}?{query}",
-        headers={"User-Agent": "cross-lingual-mapping-assistant/refresh-wiki-cache"},
+        headers={"User-Agent": "agentic-amdbpedia/refresh-wiki-cache"},
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - fixed https base_url

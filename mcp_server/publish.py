@@ -29,7 +29,7 @@ from logging_config import log_event
 
 LOGGER = logging.getLogger("dbpedia_mapping_assistant.publish")
 
-_HEADERS = {"User-Agent": "cross-lingual-mapping-assistant/publish"}
+_HEADERS = {"User-Agent": "agentic-amdbpedia/publish"}
 
 
 class PublishError(ClientSafeError):

@@ -1,4 +1,4 @@
-# Cross-Lingual Knowledge Engineering Assistant
+# agentic-amdbpedia
 
 Amharic-to-English DBpedia ontology mapping via hybrid RAG and MCP tools.
 
