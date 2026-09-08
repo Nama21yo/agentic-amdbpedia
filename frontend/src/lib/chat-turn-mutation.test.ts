@@ -105,4 +105,52 @@ describe('mutating a turn after push (reproducing "chat doesn\'t show the reply"
 			expect(screen.queryByRole('button', { name: /reject/i })).not.toBeInTheDocument();
 		});
 	});
+
+	it('publishes an approved mapping live from the chat, behind a confirmation dialog', async () => {
+		vi.spyOn(api, 'previewMapping').mockReturnValue(fakeStream());
+		const decideReviewSpy = vi
+			.spyOn(api, 'decideReview')
+			.mockResolvedValueOnce({
+				id: REVIEW_ITEM_ID,
+				templateName: 'Infobox bridge',
+				domainClass: 'Bridge',
+				status: 'approved',
+				submittedAt: '2026-01-01T00:00:00Z',
+				mappings: [{ templateProperty: 'ርዝመት', ontologyProperty: 'length', confidence: 0.75 }]
+			} satisfies ReviewItem)
+			.mockResolvedValueOnce({
+				id: REVIEW_ITEM_ID,
+				templateName: 'Infobox bridge',
+				domainClass: 'Bridge',
+				status: 'published',
+				submittedAt: '2026-01-01T00:00:00Z',
+				mappings: [{ templateProperty: 'ርዝመት', ontologyProperty: 'length', confidence: 0.75 }]
+			} satisfies ReviewItem);
+
+		await submitBridgeInfobox();
+
+		(await screen.findByRole('button', { name: /approve/i })).click();
+		await waitFor(() => {
+			expect(screen.getByRole('button', { name: /publish to live wiki/i })).toBeInTheDocument();
+		});
+
+		// Clicking Publish opens a confirmation dialog rather than publishing
+		// immediately -- a real, outward-facing MediaWiki write is never a
+		// bare one-click action, in chat or on /review alike.
+		screen.getByRole('button', { name: /publish to live wiki/i }).click();
+		expect(await screen.findByText('Publish this mapping live?')).toBeInTheDocument();
+		expect(decideReviewSpy).toHaveBeenCalledTimes(1); // not yet -- only the earlier approve call
+
+		screen.getByRole('button', { name: /^publish$/i }).click();
+
+		await waitFor(() => {
+			expect(decideReviewSpy).toHaveBeenCalledWith(REVIEW_ITEM_ID, 'approved', { publish: true });
+		});
+		await waitFor(() => {
+			expect(screen.getByText('Published')).toBeInTheDocument();
+			expect(
+				screen.queryByRole('button', { name: /publish to live wiki/i })
+			).not.toBeInTheDocument();
+		});
+	});
 });

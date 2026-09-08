@@ -27,6 +27,12 @@ export interface PipelineTurn {
 	reviewStatus?: ReviewStatus;
 	deciding?: boolean;
 	decisionError?: string;
+	// Publishing is a separate, later step from approving -- a turn can sit
+	// at reviewStatus "approved" for a while before (or without) also being
+	// published live. Kept distinct from `deciding`/`decisionError` so a
+	// publish failure never gets confused with an approve/reject failure.
+	publishing?: boolean;
+	publishError?: string;
 	running: boolean;
 	error?: string;
 }

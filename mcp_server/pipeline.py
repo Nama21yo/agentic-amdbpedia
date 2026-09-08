@@ -180,14 +180,29 @@ def parse_templates(text: str) -> list[ExtractedTemplate]:
     return templates
 
 
-def extract_first_infobox(wikitext: str) -> ExtractedTemplate | None:
+def extract_first_infobox(
+    wikitext: str, *, mapping_index: AmharicMappingIndex | None = None
+) -> ExtractedTemplate | None:
     """The first infobox-like template found in `wikitext`, name and all —
     `extract_infobox` (16.1's original public function) only returns the
     fields, which was enough for that milestone but not for 16.2's
     orchestration, which also needs the template name itself for the
-    review item and the published page title."""
+    review item and the published page title.
 
-    infobox_templates = [t for t in parse_templates(wikitext) if _is_infobox_like(t.name)]
+    A template counts as infobox-like if either `_is_infobox_like`'s
+    marker-word heuristic matches its name, OR `mapping_index` (when given)
+    already has a real `Mapping am:<name>` page for it — confirmed live
+    that the heuristic alone misses real, already-mapped templates whose
+    Amharic name doesn't happen to contain "infobox"/"መረጃ"/"ሳጥን" (e.g. the
+    Place template, "የቦታ ስም"), which silently dropped every Place infobox
+    a user pasted before this second signal was added."""
+
+    def _counts_as_infobox(name: str) -> bool:
+        if _is_infobox_like(name):
+            return True
+        return mapping_index is not None and mapping_index.is_known_template(name)
+
+    infobox_templates = [t for t in parse_templates(wikitext) if _counts_as_infobox(t.name)]
     if not infobox_templates:
         log_event(LOGGER, "pipeline.no_infobox_found")
         return None
@@ -196,12 +211,14 @@ def extract_first_infobox(wikitext: str) -> ExtractedTemplate | None:
     return infobox_templates[0]
 
 
-def extract_infobox(wikitext: str) -> list[TemplateField]:
+def extract_infobox(
+    wikitext: str, *, mapping_index: AmharicMappingIndex | None = None
+) -> list[TemplateField]:
     """Extract the fields of the first infobox-like template found in
     `wikitext`. Returns an empty list if none is found — never raises just
     because the input isn't a recognizable infobox."""
 
-    template = extract_first_infobox(wikitext)
+    template = extract_first_infobox(wikitext, mapping_index=mapping_index)
     return template.fields if template is not None else []
 
 
@@ -232,19 +249,24 @@ class PipelineState(TypedDict, total=False):
 
 
 def _extract_node(state: PipelineState) -> dict[str, Any]:
-    template = extract_first_infobox(state["wikitext"])
-    warnings = list(state.get("warnings", []))
-
-    if template is None:
-        warnings.append("No infobox-like template found in the given wikitext.")
-        return {"template_name": "", "fields": [], "warnings": warnings}
-
+    # Loaded before extraction (not after, as this used to be ordered) so
+    # `extract_first_infobox` can consult the corpus's own known-template
+    # names as a second infobox-recognition signal, alongside the
+    # marker-word heuristic -- see that function's docstring.
     state_mapping_index = state.get("mapping_index")
     mapping_index = (
         state_mapping_index
         if state_mapping_index is not None
         else AmharicMappingIndex.from_default_cache()
     )
+
+    template = extract_first_infobox(state["wikitext"], mapping_index=mapping_index)
+    warnings = list(state.get("warnings", []))
+
+    if template is None:
+        warnings.append("No infobox-like template found in the given wikitext.")
+        return {"template_name": "", "fields": [], "warnings": warnings}
+
     kept_fields: list[TemplateField] = []
     skipped = 0
     for field in template.fields:

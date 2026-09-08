@@ -26,6 +26,7 @@
 		TableHeader,
 		TableRow
 	} from '$lib/components/ui/table/index.js';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import ConfidencePill from '$lib/components/ConfidencePill.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import StepTracker from '$lib/components/StepTracker.svelte';
@@ -38,6 +39,7 @@
 		faArrowRight,
 		faCircleCheck,
 		faCircleXmark,
+		faCloudUploadAlt,
 		faSpinner
 	} from '@fortawesome/free-solid-svg-icons';
 
@@ -171,11 +173,11 @@
 	// Approve/reject right here, on the review-queue row this exact chat
 	// turn just created -- previously the only way to act on it was to
 	// leave for /review, find the same row again, and decide there.
-	// Deliberately approve/reject only, no correction editing and no
-	// publish here: those stay real, separate, more deliberate actions on
-	// /review (publish especially -- a live, outward-facing MediaWiki
-	// write gated behind its own confirmation dialog there) rather than
-	// one-click from a chat bubble.
+	// Deliberately approve/reject only, no correction editing here (still a
+	// /review-only action) -- but publishing IS available from here too,
+	// see `publish()` below, so the whole human-in-the-loop (approve or
+	// reject, then optionally publish live) can finish without ever
+	// leaving the chat.
 	async function decide(turn: PipelineTurn, decision: 'approved' | 'rejected') {
 		if (!turn.reviewItemId || turn.deciding) return;
 		const id = turn.reviewItemId;
@@ -204,6 +206,62 @@
 			// already surfaced via the toast.promise error callback above
 		} finally {
 			turn.deciding = false;
+		}
+	}
+
+	// Which turn's publish-confirmation dialog is open, if any -- at most
+	// one at a time, matching /review's own `confirmPublishFor` pattern.
+	// Publishing is a real, outward-facing, hard-to-reverse write to the
+	// live MediaWiki (mcp_server.publish.publish_mapping), so it always
+	// goes through this confirmation step, in chat or on /review alike --
+	// never a bare one-click action.
+	let confirmPublishTurnId = $state<string | null>(null);
+
+	function requestPublish(turn: PipelineTurn) {
+		if (!turn.reviewItemId || turn.reviewStatus !== 'approved') return;
+		confirmPublishTurnId = turn.id;
+	}
+
+	async function publish(turn: PipelineTurn) {
+		if (!turn.reviewItemId || turn.publishing) return;
+		const id = turn.reviewItemId;
+		turn.publishing = true;
+		turn.publishError = undefined;
+
+		// decision: 'approved' again is deliberate, not a re-approval --
+		// mcp_server.http_app.decide_review always applies the decision
+		// (idempotent when already approved) and only then, given
+		// `publish: true`, attempts the live write. A failed publish
+		// leaves the review at "approved" (never a silent partial state),
+		// so the button just becomes retryable.
+		const request = decideReview(id, 'approved', { publish: true });
+		toast.promise(request, {
+			loading: `Publishing ${turn.mappingWikitext ? 'mapping' : 'to the live wiki'}…`,
+			success: (updated) => {
+				turn.reviewStatus = updated.status;
+				return updated.status === 'published'
+					? 'Published to the live wiki.'
+					: `Marked as ${updated.status.replace('_', ' ')}.`;
+			},
+			error: (err) => {
+				turn.publishError =
+					err instanceof DecisionFailedError
+						? err.message
+						: 'Could not reach the backend to publish.';
+				if (err instanceof DecisionFailedError && err.review) {
+					turn.reviewStatus = err.review.status;
+				}
+				return `Publish failed: ${turn.publishError}`;
+			}
+		});
+
+		try {
+			await request;
+		} catch {
+			// already surfaced via the toast.promise error callback above
+		} finally {
+			turn.publishing = false;
+			confirmPublishTurnId = null;
 		}
 	}
 
@@ -315,7 +373,31 @@
 											class="overflow-x-auto border-t bg-muted/40 px-3 py-2.5 font-mono text-xs whitespace-pre-wrap">{turn.xmlRules}</pre>
 									</details>
 								{/if}
-								{#if turn.reviewStatus}
+								{#if turn.reviewStatus === 'approved'}
+									<div class="flex flex-wrap items-center gap-2">
+										<StatusBadge status={turn.reviewStatus} />
+										<Button
+											size="sm"
+											disabled={turn.publishing}
+											onclick={() => requestPublish(turn)}
+										>
+											<Fa
+												icon={turn.publishing ? faSpinner : faCloudUploadAlt}
+												class="size-3.5 {turn.publishing ? 'animate-spin' : ''}"
+											/>
+											Publish to live wiki
+										</Button>
+										<a
+											href={resolve('/review')}
+											class="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
+										>
+											View in Review Queue
+										</a>
+									</div>
+									{#if turn.publishError}
+										<p class="text-sm text-destructive">{turn.publishError}</p>
+									{/if}
+								{:else if turn.reviewStatus}
 									<div class="flex w-fit items-center gap-2">
 										<StatusBadge status={turn.reviewStatus} />
 										<a
@@ -447,3 +529,51 @@
 		</div>
 	</div>
 </div>
+
+{#each turns as turn (turn.id)}
+	{#if turn.kind === 'pipeline'}
+		<AlertDialog.Root
+			open={confirmPublishTurnId === turn.id}
+			onOpenChange={(open) => {
+				if (!open) confirmPublishTurnId = null;
+			}}
+		>
+			<AlertDialog.Content>
+				<AlertDialog.Header>
+					<AlertDialog.Title>Publish this mapping live?</AlertDialog.Title>
+					<AlertDialog.Description>
+						This writes <span class="font-mono text-foreground">{turn.mappings?.length ?? 0}</span>
+						mapping{turn.mappings?.length === 1 ? '' : 's'} to
+						<span class="font-mono text-foreground">mappings.dbpedia.org</span> immediately, using a MediaWiki
+						Bot Password — a real edit, not a preview.
+					</AlertDialog.Description>
+				</AlertDialog.Header>
+				{#if turn.mappings}
+					<ul class="space-y-1 rounded-lg border bg-muted/40 p-2">
+						{#each turn.mappings as mapping (mapping.templateProperty)}
+							<li class="font-mono text-xs">
+								{mapping.templateProperty} to
+								<span class="text-foreground">{mapping.ontologyProperty}</span>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+				<AlertDialog.Footer>
+					<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+					<AlertDialog.Action
+						disabled={Boolean(turn.publishing)}
+						onclick={(e) => {
+							e.preventDefault();
+							publish(turn);
+						}}
+					>
+						{#if turn.publishing}
+							<Fa icon={faSpinner} class="size-3.5 animate-spin" />
+						{/if}
+						Publish
+					</AlertDialog.Action>
+				</AlertDialog.Footer>
+			</AlertDialog.Content>
+		</AlertDialog.Root>
+	{/if}
+{/each}

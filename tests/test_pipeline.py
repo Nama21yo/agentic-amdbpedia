@@ -4,9 +4,11 @@ from mcp_server.pipeline import (
     TemplateField,
     _parse_with_fallback,
     _parse_with_mwparser,
+    extract_first_infobox,
     extract_infobox,
     parse_templates,
 )
+from rag.ontology import AmharicMappingIndex
 
 # A real Amharic Wikipedia-shaped infobox: Dedessa Bridge ("ደደሳ ድልድይ"),
 # its length field ("ርዝመት") the stated 16.1 acceptance criterion.
@@ -62,6 +64,39 @@ def test_extract_infobox_picks_the_first_infobox_when_multiple_templates_present
     fields = extract_infobox(wikitext)
 
     assert fields == [TemplateField(name="ርዝመት", value="500")]
+
+
+def test_extract_first_infobox_misses_a_real_template_with_no_marker_word_by_itself() -> None:
+    # Regression: confirmed live against the real corpus that "የቦታ ስም" (the
+    # Place template) contains none of INFOBOX_MARKERS ("infobox"/"info
+    # box"/"መረጃ"/"ሳጥን") -- the marker heuristic alone silently drops every
+    # Place infobox a user pastes.
+    wikitext = "{{የቦታ ስም | ስም = ጎንደር | ክልል = አማራ}}"
+
+    assert extract_first_infobox(wikitext) is None
+
+
+def test_extract_first_infobox_recognizes_a_known_template_the_marker_heuristic_misses() -> None:
+    wikitext = "{{የቦታ ስም | ስም = ጎንደር | ክልል = አማራ}}"
+    mapping_index = AmharicMappingIndex({}, frozenset({"የቦታ ስም"}))
+
+    template = extract_first_infobox(wikitext, mapping_index=mapping_index)
+
+    assert template is not None
+    assert template.name == "የቦታ ስም"
+    assert [f.name for f in template.fields] == ["ስም", "ክልል"]
+
+
+def test_extract_first_infobox_known_template_check_ignores_whitespace_underscore_and_case() -> (
+    None
+):
+    wikitext = "{{የቦታ_ስም | ስም = ጎንደር}}"
+    mapping_index = AmharicMappingIndex({}, frozenset({"የቦታ ስም"}))
+
+    template = extract_first_infobox(wikitext, mapping_index=mapping_index)
+
+    assert template is not None
+    assert template.name == "የቦታ_ስም"
 
 
 def test_parse_templates_handles_nested_templates_without_breaking_on_inner_pipes() -> None:

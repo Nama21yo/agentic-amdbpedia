@@ -199,7 +199,18 @@ class DbpediaOntologyCatalog:
 
 
 class AmharicMappingIndex:
-    """Existing Amharic templateProperty -> ontologyProperty mappings."""
+    """Existing Amharic templateProperty -> ontologyProperty mappings.
+
+    Also tracks the set of template (page) names the corpus has a real
+    `Mapping am:<name>` page for -- `mcp_server.pipeline._is_infobox_like`'s
+    marker-word heuristic ("infobox"/"info box"/"መረጃ"/"ሳጥን") misses real,
+    already-mapped templates whose Amharic name doesn't happen to contain
+    one of those words (confirmed live: "የቦታ ስም", the Place template, has
+    none of them). `is_known_template` gives the pipeline a second,
+    ground-truth signal -- a template this corpus already has a mapping
+    page for is unambiguously a real infobox, regardless of what its name
+    looks like.
+    """
 
     PROPERTY_MAPPING_RE = re.compile(
         r"\{\{\s*PropertyMapping\b(?P<body>.*?)\}\}",
@@ -211,9 +222,15 @@ class AmharicMappingIndex:
     ONTOLOGY_PROPERTY_RE = re.compile(
         r"\|\s*ontologyProperty\s*=\s*(?P<value>[^|}\n]+)", re.IGNORECASE
     )
+    PAGE_TITLE_RE = re.compile(r"<title>\s*Mapping\s+am:(?P<name>[^<]+?)\s*</title>", re.IGNORECASE)
 
-    def __init__(self, mappings: dict[str, ExistingTemplateMapping]) -> None:
+    def __init__(
+        self,
+        mappings: dict[str, ExistingTemplateMapping],
+        template_names: frozenset[str] = frozenset(),
+    ) -> None:
         self._mappings = mappings
+        self._template_names = template_names
 
     def __len__(self) -> int:
         return len(self._mappings)
@@ -252,11 +269,28 @@ class AmharicMappingIndex:
                 ),
             )
 
-        log_event(LOGGER, "mapping_index.load_completed", mappings=len(mappings))
-        return cls(mappings)
+        template_names = frozenset(
+            cls._normalize_template_name(match.group("name"))
+            for match in cls.PAGE_TITLE_RE.finditer(text)
+        )
+
+        log_event(
+            LOGGER,
+            "mapping_index.load_completed",
+            mappings=len(mappings),
+            templates=len(template_names),
+        )
+        return cls(mappings, template_names)
 
     def lookup(self, template_property: str) -> ExistingTemplateMapping | None:
         return self._mappings.get(self._normalize_template_property(template_property))
+
+    def is_known_template(self, template_name: str) -> bool:
+        """Whether this corpus has a real `Mapping am:<template_name>` page
+        -- a stronger, ground-truth signal than the marker-word heuristic
+        `_is_infobox_like` uses on its own."""
+
+        return self._normalize_template_name(template_name) in self._template_names
 
     def all_mappings(self) -> tuple[ExistingTemplateMapping, ...]:
         return tuple(self._mappings.values())
@@ -269,3 +303,8 @@ class AmharicMappingIndex:
     def _normalize_template_property(value: str) -> str:
         normalized = re.sub(r"\s+", "_", value.strip())
         return normalized.strip("_").casefold()
+
+    @staticmethod
+    def _normalize_template_name(value: str) -> str:
+        normalized = re.sub(r"[\s_]+", " ", value.strip())
+        return normalized.casefold()

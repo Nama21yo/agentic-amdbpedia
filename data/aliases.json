@@ -64,6 +64,48 @@
       "english_aliases": ["UTC", "UTC offset", "time zone offset"],
       "ontology_property": "utcOffset",
       "notes": "Acronym-sensitive time offset field."
+    },
+    {
+      "class": "Country",
+      "amharic": "ህዝብ_ብዛት",
+      "english_aliases": ["population", "population total"],
+      "ontology_property": "populationTotal",
+      "notes": "Confirmed live to fail retrieval without this alias, unlike Settlement's own 'ጠቅላላ_ህዝብ' phrasing for the same property -- real Amharic Wikipedia articles use both."
+    },
+    {
+      "class": "Country",
+      "amharic": "የቆዳ_ስፋት",
+      "english_aliases": ["area", "total area", "land area"],
+      "ontology_property": "areaTotal",
+      "notes": "Colloquial Amharic phrase for area ('skin/surface size'); confirmed live to fail retrieval unaided."
+    },
+    {
+      "class": "Person",
+      "amharic": "የስራ_መስክ",
+      "english_aliases": ["occupation", "field of work"],
+      "ontology_property": "occupation",
+      "notes": "Common variant of the already-mapped 'ሙያ' (profession); confirmed live to fail retrieval unaided."
+    },
+    {
+      "class": "Person",
+      "amharic": "ትውልድ_ዓመት",
+      "english_aliases": ["birth year", "year of birth"],
+      "ontology_property": "birthYear",
+      "notes": "Distinct DBpedia property from birthDate (full date); confirmed live to fail retrieval unaided."
+    },
+    {
+      "class": "Film",
+      "amharic": "ደረጃ",
+      "english_aliases": ["rating", "film rating"],
+      "ontology_property": "rating",
+      "notes": "Confirmed live to fail retrieval unaided; genuinely generic Amharic word, so the alias is class-scoped to Film rather than left ambiguous."
+    },
+    {
+      "class": "Film",
+      "amharic": "ቋንቋ",
+      "english_aliases": ["language", "film language"],
+      "ontology_property": "language",
+      "notes": "Distinct from the already-mapped 'ብሔራዊ_ቋንቋ' (Country's officialLanguage); confirmed live to fail retrieval unaided."
     }
   ]
 }
