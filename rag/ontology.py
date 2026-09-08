@@ -252,9 +252,7 @@ class AmharicMappingIndex:
     # MediaWiki XML export pages never nest, so splitting on the literal
     # page-boundary tags is enough to scope each PropertyMapping match to
     # the page (template) it actually came from, without a full XML parse.
-    PAGE_RE = re.compile(
-        r"<(?:[\w.-]+:)?page\b.*?</(?:[\w.-]+:)?page>", re.IGNORECASE | re.DOTALL
-    )
+    PAGE_RE = re.compile(r"<(?:[\w.-]+:)?page\b.*?</(?:[\w.-]+:)?page>", re.IGNORECASE | re.DOTALL)
 
     def __init__(
         self,
@@ -313,9 +311,7 @@ class AmharicMappingIndex:
                 )
                 normalized_property = cls._normalize_template_property(template_property)
                 mappings.setdefault(normalized_property, entry)
-                scoped_mappings.setdefault(
-                    (normalized_template_name, normalized_property), entry
-                )
+                scoped_mappings.setdefault((normalized_template_name, normalized_property), entry)
 
         log_event(
             LOGGER,
