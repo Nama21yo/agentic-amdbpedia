@@ -210,6 +210,22 @@ class AmharicMappingIndex:
     ground-truth signal -- a template this corpus already has a mapping
     page for is unambiguously a real infobox, regardless of what its name
     looks like.
+
+    `lookup()` matches a templateProperty globally, first-page-wins across
+    the whole corpus -- kept exactly as before for existing callers. But
+    common Amharic field names (ስም, ስዕል, ከፍታ, ...) genuinely get reused
+    across unrelated templates with different intended ontology properties,
+    and confirmed live that `lookup()`'s global, unscoped match makes
+    `mcp_server.pipeline._extract_node` silently treat a brand-new field on
+    an unmapped template (e.g. Dam's own "ከፍታ") as "already published"
+    just because some *other*, unrelated template (Place) happens to use
+    the same Amharic word for a different property (elevation, not
+    height) -- dropping the field before it ever reaches prediction, on a
+    template this corpus has never actually mapped at all.
+    `is_already_mapped_on_template()` is the scoped alternative:
+    template-and-property together, no cross-template fallback, so a
+    field only counts as "already published" when it actually is, for
+    *this* template.
     """
 
     PROPERTY_MAPPING_RE = re.compile(
@@ -222,15 +238,35 @@ class AmharicMappingIndex:
     ONTOLOGY_PROPERTY_RE = re.compile(
         r"\|\s*ontologyProperty\s*=\s*(?P<value>[^|}\n]+)", re.IGNORECASE
     )
-    PAGE_TITLE_RE = re.compile(r"<title>\s*Mapping\s+am:(?P<name>[^<]+?)\s*</title>", re.IGNORECASE)
+    # `scripts.refresh_wiki_cache.refresh_mappings` re-serializes a merged
+    # export through ElementTree, which rewrites the default `xmlns=` into
+    # an explicit `ns0:` prefix on every element (confirmed live) -- the
+    # freshly-cached file after any `just refresh-mappings` run no longer
+    # has bare `<page>`/`<title>` tags the way the original raw API export
+    # (and this repo's shipped `data/wiki_cache/mapping_am.xml` snapshot)
+    # does. An optional namespace prefix keeps both forms working.
+    PAGE_TITLE_RE = re.compile(
+        r"<(?:[\w.-]+:)?title>\s*Mapping\s+am:(?P<name>[^<]+?)\s*</(?:[\w.-]+:)?title>",
+        re.IGNORECASE,
+    )
+    # MediaWiki XML export pages never nest, so splitting on the literal
+    # page-boundary tags is enough to scope each PropertyMapping match to
+    # the page (template) it actually came from, without a full XML parse.
+    PAGE_RE = re.compile(
+        r"<(?:[\w.-]+:)?page\b.*?</(?:[\w.-]+:)?page>", re.IGNORECASE | re.DOTALL
+    )
 
     def __init__(
         self,
         mappings: dict[str, ExistingTemplateMapping],
         template_names: frozenset[str] = frozenset(),
+        scoped_mappings: dict[tuple[str, str], ExistingTemplateMapping] | None = None,
     ) -> None:
         self._mappings = mappings
         self._template_names = template_names
+        self._scoped_mappings: dict[tuple[str, str], ExistingTemplateMapping] = (
+            scoped_mappings or {}
+        )
 
     def __len__(self) -> int:
         return len(self._mappings)
@@ -248,31 +284,38 @@ class AmharicMappingIndex:
         log_event(LOGGER, "mapping_index.load_started", mapping_path=str(mapping_path))
         text = mapping_path.read_text(encoding="utf-8")
         mappings: dict[str, ExistingTemplateMapping] = {}
+        scoped_mappings: dict[tuple[str, str], ExistingTemplateMapping] = {}
+        template_names: set[str] = set()
 
-        for match in cls.PROPERTY_MAPPING_RE.finditer(text):
-            body = match.group("body")
-            template_match = cls.TEMPLATE_PROPERTY_RE.search(body)
-            ontology_match = cls.ONTOLOGY_PROPERTY_RE.search(body)
-            if template_match is None or ontology_match is None:
+        for page_match in cls.PAGE_RE.finditer(text):
+            page_text = page_match.group()
+            title_match = cls.PAGE_TITLE_RE.search(page_text)
+            if title_match is None:
                 continue
+            normalized_template_name = cls._normalize_template_name(title_match.group("name"))
+            template_names.add(normalized_template_name)
 
-            template_property = cls._clean_mapping_value(template_match.group("value"))
-            ontology_property = cls._clean_mapping_value(ontology_match.group("value"))
-            if not template_property or not ontology_property:
-                continue
+            for match in cls.PROPERTY_MAPPING_RE.finditer(page_text):
+                body = match.group("body")
+                template_match = cls.TEMPLATE_PROPERTY_RE.search(body)
+                ontology_match = cls.ONTOLOGY_PROPERTY_RE.search(body)
+                if template_match is None or ontology_match is None:
+                    continue
 
-            mappings.setdefault(
-                cls._normalize_template_property(template_property),
-                ExistingTemplateMapping(
+                template_property = cls._clean_mapping_value(template_match.group("value"))
+                ontology_property = cls._clean_mapping_value(ontology_match.group("value"))
+                if not template_property or not ontology_property:
+                    continue
+
+                entry = ExistingTemplateMapping(
                     template_property=template_property,
                     ontology_property=ontology_property,
-                ),
-            )
-
-        template_names = frozenset(
-            cls._normalize_template_name(match.group("name"))
-            for match in cls.PAGE_TITLE_RE.finditer(text)
-        )
+                )
+                normalized_property = cls._normalize_template_property(template_property)
+                mappings.setdefault(normalized_property, entry)
+                scoped_mappings.setdefault(
+                    (normalized_template_name, normalized_property), entry
+                )
 
         log_event(
             LOGGER,
@@ -280,10 +323,27 @@ class AmharicMappingIndex:
             mappings=len(mappings),
             templates=len(template_names),
         )
-        return cls(mappings, template_names)
+        return cls(mappings, frozenset(template_names), scoped_mappings)
 
     def lookup(self, template_property: str) -> ExistingTemplateMapping | None:
         return self._mappings.get(self._normalize_template_property(template_property))
+
+    def is_already_mapped_on_template(
+        self, template_name: str, template_property: str
+    ) -> ExistingTemplateMapping | None:
+        """Scoped alternative to `lookup()`: only counts as already-mapped
+        when *this exact template* has a published mapping for the field --
+        never a coincidental match from some other, unrelated template. See
+        this class's docstring for why `lookup()` alone isn't safe for
+        `mcp_server.pipeline._extract_node`'s "skip already-published
+        fields" filter."""
+
+        return self._scoped_mappings.get(
+            (
+                self._normalize_template_name(template_name),
+                self._normalize_template_property(template_property),
+            )
+        )
 
     def is_known_template(self, template_name: str) -> bool:
         """Whether this corpus has a real `Mapping am:<template_name>` page

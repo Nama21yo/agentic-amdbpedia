@@ -128,8 +128,15 @@ async def test_pipeline_skips_fields_already_in_the_mapping_index(
 
     from rag.ontology import ExistingTemplateMapping
 
+    entry = ExistingTemplateMapping(template_property="ስም", ontology_property="foaf:name")
     already_mapped_index = AmharicMappingIndex(
-        {"ስም": ExistingTemplateMapping(template_property="ስም", ontology_property="foaf:name")}
+        {"ስም": entry},
+        scoped_mappings={
+            (
+                AmharicMappingIndex._normalize_template_name("መረጃሳጥን ድልድይ"),
+                AmharicMappingIndex._normalize_template_property("ስም"),
+            ): entry
+        },
     )
 
     async with factory() as session:
@@ -144,6 +151,50 @@ async def test_pipeline_skips_fields_already_in_the_mapping_index(
     assert "ስም" not in template_properties
     assert "ርዝመት" in template_properties
     assert any("Skipped 1 field" in warning for warning in result.warnings)
+
+
+@pytest.mark.asyncio
+async def test_pipeline_does_not_skip_a_field_only_mapped_on_a_different_template(
+    engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: confirmed live against the real corpus that a field name
+    shared across templates (e.g. "ከፍታ", used by both the Place and Dam
+    infoboxes) was being treated as "already mapped" for *every* template
+    the moment *any* template published it -- silently dropping a
+    genuinely new field on a template (Dam) this corpus has never actually
+    mapped, purely because an unrelated template (Place) happens to reuse
+    the same Amharic word for a different property."""
+
+    monkeypatch.setattr("mcp_server.pipeline.predict_property", _fake_predict_property)
+    factory = session_factory(engine)
+
+    from rag.ontology import ExistingTemplateMapping
+
+    # "ርዝመት" is published for a *different* template ("የቦታ ስም") than the
+    # one this run's wikitext actually uses ("መረጃሳጥን ድልድይ") -- it must not
+    # be filtered out here just because it's mapped somewhere else.
+    entry = ExistingTemplateMapping(template_property="ርዝመት", ontology_property="length")
+    other_template_index = AmharicMappingIndex(
+        {"ርዝመት": entry},
+        scoped_mappings={
+            (
+                AmharicMappingIndex._normalize_template_name("የቦታ ስም"),
+                AmharicMappingIndex._normalize_template_property("ርዝመት"),
+            ): entry
+        },
+    )
+
+    async with factory() as session:
+        result = await run_mapping_pipeline(
+            BRIDGE_WIKITEXT,
+            domain_class="Bridge",
+            session=session,
+            mapping_index=other_template_index,
+        )
+
+    template_properties = {m["templateProperty"] for m in result.mappings}
+    assert "ርዝመት" in template_properties
+    assert not any("Skipped" in warning for warning in result.warnings)
 
 
 @pytest.mark.asyncio

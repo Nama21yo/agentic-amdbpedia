@@ -81,3 +81,33 @@ def test_mapping_index_lookup_normalizes_whitespace_and_case() -> None:
 def test_mapping_index_missing_file_returns_empty_not_error(tmp_path: Path) -> None:
     index = AmharicMappingIndex.from_mapping_xml(tmp_path / "does-not-exist.xml")
     assert len(index) == 0
+
+
+def test_mapping_index_is_known_template_recognizes_a_real_page_with_no_marker_word() -> None:
+    # "የቦታ ስም" (Place) contains none of _is_infobox_like's marker words --
+    # this is the second, ground-truth recognition signal that rescues it.
+    index = AmharicMappingIndex.from_default_cache()
+    assert index.is_known_template("የቦታ ስም") is True
+    assert index.is_known_template("ይህ_ምንም_ግንኙነት_የሌለው_ስም") is False
+
+
+def test_mapping_index_scoped_lookup_finds_a_real_per_template_mapping() -> None:
+    index = AmharicMappingIndex.from_default_cache()
+    mapping = index.is_already_mapped_on_template("የቦታ ስም", "ከፍታ")
+    assert mapping is not None
+    assert mapping.ontology_property == "elevation"
+
+
+def test_mapping_index_scoped_lookup_does_not_leak_across_templates() -> None:
+    # Regression: confirmed live that Place's "ከፍታ -> elevation" mapping
+    # was making Dam's own, genuinely unmapped "ከፍታ" field look
+    # already-published via the old global lookup() -- scoped lookup must
+    # not repeat that mistake. Dam has no Mapping am:* page in this corpus
+    # at all, so this must come back empty regardless of what other
+    # templates map the same Amharic word to.
+    index = AmharicMappingIndex.from_default_cache()
+    assert index.is_already_mapped_on_template("መረጃሳጥን ግድብ", "ከፍታ") is None
+    # lookup() (the old, unscoped API) still finds it globally -- unchanged
+    # behavior for existing callers, which is exactly what makes the scoped
+    # method necessary for mcp_server.pipeline._extract_node's filter.
+    assert index.lookup("ከፍታ") is not None

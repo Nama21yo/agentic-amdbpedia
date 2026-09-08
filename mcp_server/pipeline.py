@@ -270,7 +270,13 @@ def _extract_node(state: PipelineState) -> dict[str, Any]:
     kept_fields: list[TemplateField] = []
     skipped = 0
     for field in template.fields:
-        if mapping_index.lookup(field.name) is not None:
+        # Scoped to this exact template -- not AmharicMappingIndex.lookup(),
+        # which matches a field name globally across the whole corpus and
+        # confirmed live to silently drop genuinely new fields on unmapped
+        # templates (Dam's own "ከፍታ") just because an unrelated template
+        # (Place) happens to reuse the same Amharic word for a different
+        # property. See AmharicMappingIndex's own docstring for the story.
+        if mapping_index.is_already_mapped_on_template(template.name, field.name) is not None:
             skipped += 1
             continue
         kept_fields.append(field)
