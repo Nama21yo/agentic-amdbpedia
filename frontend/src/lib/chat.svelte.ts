@@ -6,7 +6,13 @@
 // navigate away and back" without inventing backend storage this app
 // doesn't otherwise need.
 import { browser } from '$app/environment';
-import type { AgentStep, MappingCandidate, PredictedMapping, ReviewStatus } from './types';
+import type {
+	AgentStep,
+	MappingCandidate,
+	PredictedMapping,
+	ReviewStatus,
+	UnmappedField
+} from './types';
 
 export interface PipelineTurn {
 	id: string;
@@ -30,6 +36,14 @@ export interface PipelineTurn {
 	// domain class. Without these a mostly-already-mapped infobox looks
 	// broken ("only 2 mapped?") rather than correct.
 	warnings?: string[];
+	// Fields the pipeline couldn't map at all. The reviewer can search the
+	// ontology and attach a mapping to any of these from the chat (see
+	// `manualMappings`), or leave them for the Review Queue.
+	unmappedFields?: UnmappedField[];
+	// Mappings the reviewer assigned by hand from the chat, for fields in
+	// `unmappedFields`. Merged with `mappings` on approve via the decision
+	// endpoint's existing `corrected_mappings` path -- not a separate write.
+	manualMappings?: PredictedMapping[];
 	deciding?: boolean;
 	decisionError?: string;
 	// Publishing is a separate, later step from approving -- a turn can sit

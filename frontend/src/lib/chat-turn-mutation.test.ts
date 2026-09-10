@@ -17,6 +17,7 @@ async function* fakeStream(): AsyncGenerator<
 			mappings: PredictedMapping[];
 			reviewItemId: string | null;
 			warnings?: string[];
+			unmappedFields?: { name: string; value: string }[];
 	  } & MappingSyntax)
 > {
 	yield { node: 'extract_infobox_fields', status: 'done', detail: 'Extracting' };
@@ -28,7 +29,8 @@ async function* fakeStream(): AsyncGenerator<
 			'{{TemplateMapping\n | mapToClass = Bridge\n | mappings =\n  {{PropertyMapping | templateProperty = ርዝመት | ontologyProperty = length }}\n}}',
 		xmlRules: '<TemplateMapping mapToClass="dbo:Bridge">...</TemplateMapping>',
 		reviewItemId: REVIEW_ITEM_ID,
-		warnings: ['Skipped 3 field(s) already present in the published Amharic mappings.']
+		warnings: ['Skipped 3 field(s) already present in the published Amharic mappings.'],
+		unmappedFields: [{ name: 'ካርታ_መግለጫ', value: 'a caption' }]
 	};
 }
 
@@ -166,6 +168,53 @@ describe('mutating a turn after push (reproducing "chat doesn\'t show the reply"
 			expect(
 				screen.queryByRole('button', { name: /publish to live wiki/i })
 			).not.toBeInTheDocument();
+		});
+	});
+
+	it('lets the reviewer assign an unmapped field from the chat and carries it on approve', async () => {
+		vi.spyOn(api, 'previewMapping').mockReturnValue(fakeStream());
+		const findSpy = vi.spyOn(api, 'findSemanticMatch').mockResolvedValue({
+			status: 'ok',
+			matches: [{ property: 'depiction', class: 'Thing', score: 0.9 }]
+		});
+		const decideReviewSpy = vi.spyOn(api, 'decideReview').mockResolvedValue({
+			id: REVIEW_ITEM_ID,
+			templateName: 'Infobox bridge',
+			domainClass: 'Bridge',
+			status: 'approved',
+			submittedAt: '2026-01-01T00:00:00Z',
+			mappings: [{ templateProperty: 'ርዝመት', ontologyProperty: 'length', confidence: 0.75 }]
+		} satisfies ReviewItem);
+
+		await submitBridgeInfobox();
+
+		// The field the pipeline couldn't map is offered with an inline search.
+		await screen.findByText(/couldn't be mapped automatically/i);
+		screen.getByRole('button', { name: /^search$/i }).click();
+		await waitFor(() => expect(findSpy).toHaveBeenCalled());
+
+		// Picking a candidate moves the field into the mappings table, tagged.
+		(await screen.findByRole('button', { name: /depiction/i })).click();
+		await waitFor(() => {
+			expect(screen.getByText('added by you')).toBeInTheDocument();
+			expect(screen.queryByText(/couldn't be mapped automatically/i)).not.toBeInTheDocument();
+		});
+
+		// Approving sends the hand-assigned row alongside the auto one, via the
+		// decision endpoint's existing corrected_mappings path.
+		screen.getByRole('button', { name: /approve/i }).click();
+		await waitFor(() => {
+			expect(decideReviewSpy).toHaveBeenCalledWith(REVIEW_ITEM_ID, 'approved', {
+				correctedMappings: [
+					{ templateProperty: 'ርዝመት', ontologyProperty: 'length', confidence: 0.75 },
+					{
+						templateProperty: 'ካርታ_መግለጫ',
+						ontologyProperty: 'depiction',
+						confidence: 0.9,
+						source: 'manual'
+					}
+				]
+			});
 		});
 	});
 });

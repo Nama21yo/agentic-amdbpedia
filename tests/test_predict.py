@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -11,6 +12,7 @@ from rag.predict import (
     NoCandidatesFound,
     PredictionResult,
     predict_property,
+    propose_property,
     resolve_model,
     snap_to_candidate,
 )
@@ -59,6 +61,31 @@ class BrokenProgram:
         raise TimeoutError("ollama unreachable")
 
 
+class FakeProposeProgram:
+    """Mimics the propose-from-scratch DSPy program (different signature
+    from the reranker: field_mention + entity_type -> property_class)."""
+
+    def __init__(self, answer: str) -> None:
+        self.answer = answer
+        self.calls: list[dict[str, str]] = []
+
+    def __call__(self, *, field_mention: str, entity_type: str) -> FakePrediction:
+        self.calls.append({"field_mention": field_mention, "entity_type": entity_type})
+        return FakePrediction(property_class=self.answer)
+
+
+class FakeCatalog:
+    """Just enough of DbpediaOntologyCatalog for propose_property: a
+    case-insensitive `find` that returns something with a `.local_name`."""
+
+    def __init__(self, *known: str) -> None:
+        self._by_name = {name.casefold(): name for name in known}
+
+    def find(self, name: str) -> Any:
+        canonical = self._by_name.get(name.strip().casefold())
+        return SimpleNamespace(local_name=canonical) if canonical else None
+
+
 def test_default_model_alias_is_gemma2() -> None:
     assert DEFAULT_MODEL_ALIAS == "gemma2"
     assert SUPPORTED_MODELS["gemma2"].litellm_model == "ollama_chat/gemma2:9b"
@@ -74,10 +101,99 @@ def test_resolve_model_passes_through_unknown_names() -> None:
 
 def test_predict_returns_no_candidates_when_retrieval_finds_nothing() -> None:
     outcome = predict_property(
-        "unrelated nonsense", search_func=_search_func([NoMatchFound(query="unrelated nonsense")])
+        "unrelated nonsense",
+        search_func=_search_func([NoMatchFound(query="unrelated nonsense")]),
+        enable_propose=False,
     )
 
     assert isinstance(outcome, NoCandidatesFound)
+
+
+def test_predict_proposes_a_validated_property_when_retrieval_is_empty() -> None:
+    program = FakeProposeProgram(answer="topLevelDomain")
+
+    outcome = predict_property(
+        "ከፍተኛ_ደረጃ_ከባቢ",
+        target_class="Country",
+        search_func=_search_func([NoMatchFound(query="ከፍተኛ_ደረጃ_ከባቢ")]),
+        circuit_breaker=None,
+        propose_program=program,
+        catalog=FakeCatalog("topLevelDomain"),
+    )
+
+    assert isinstance(outcome, PredictionResult)
+    assert outcome.property == "topLevelDomain"
+    assert outcome.llm_proposed is True
+    assert outcome.used_llm is True
+    assert outcome.top_retrieval_result is None
+    assert program.calls == [{"field_mention": "ከፍተኛ_ደረጃ_ከባቢ", "entity_type": "Country"}]
+
+
+def test_predict_rejects_a_proposed_property_that_is_not_in_the_ontology() -> None:
+    outcome = predict_property(
+        "ከፍተኛ_ደረጃ_ከባቢ",
+        search_func=_search_func([NoMatchFound(query="ከፍተኛ_ደረጃ_ከባቢ")]),
+        circuit_breaker=None,
+        propose_program=FakeProposeProgram(answer="totallyMadeUpProperty"),
+        catalog=FakeCatalog("topLevelDomain"),
+    )
+
+    assert isinstance(outcome, NoCandidatesFound)
+
+
+def test_predict_does_not_propose_when_the_circuit_breaker_is_open() -> None:
+    breaker = RetrievalCircuitBreaker(failure_threshold=1, reset_after_seconds=60)
+    breaker.record_failure()
+    program = FakeProposeProgram(answer="topLevelDomain")
+
+    outcome = predict_property(
+        "ከፍተኛ_ደረጃ_ከባቢ",
+        search_func=_search_func([NoMatchFound(query="ከፍተኛ_ደረጃ_ከባቢ")]),
+        circuit_breaker=breaker,
+        propose_program=program,
+        catalog=FakeCatalog("topLevelDomain"),
+    )
+
+    assert isinstance(outcome, NoCandidatesFound)
+    assert program.calls == []
+
+
+def test_predict_does_not_propose_when_disabled() -> None:
+    program = FakeProposeProgram(answer="topLevelDomain")
+
+    outcome = predict_property(
+        "ከፍተኛ_ደረጃ_ከባቢ",
+        search_func=_search_func([NoMatchFound(query="ከፍተኛ_ደረጃ_ከባቢ")]),
+        circuit_breaker=None,
+        enable_propose=False,
+        propose_program=program,
+        catalog=FakeCatalog("topLevelDomain"),
+    )
+
+    assert isinstance(outcome, NoCandidatesFound)
+    assert program.calls == []
+
+
+def test_propose_property_treats_a_bare_none_answer_as_no_proposal() -> None:
+    assert (
+        propose_property(
+            "ያልታወቀ",
+            program=FakeProposeProgram(answer="none"),
+            catalog=FakeCatalog("topLevelDomain"),
+        )
+        is None
+    )
+
+
+def test_propose_property_strips_a_namespace_prefix_before_validating() -> None:
+    assert (
+        propose_property(
+            "ከፍተኛ_ደረጃ_ከባቢ",
+            program=FakeProposeProgram(answer="dbo:topLevelDomain"),
+            catalog=FakeCatalog("topLevelDomain"),
+        )
+        == "topLevelDomain"
+    )
 
 
 def test_predict_uses_llm_reranked_answer_when_program_agrees_with_retriever() -> None:

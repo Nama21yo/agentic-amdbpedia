@@ -77,7 +77,12 @@ def test_preview_streams_one_event_per_node_and_a_final_result(
     ]
     result_event = events[-1]
     assert result_event["mappings"] == [
-        {"templateProperty": "ርዝመት", "ontologyProperty": "length", "confidence": 1.0}
+        {
+            "templateProperty": "ርዝመት",
+            "ontologyProperty": "length",
+            "confidence": 1.0,
+            "source": "retrieval",
+        }
     ]
     # frontend/src/routes/+page.svelte needs this to let a reviewer
     # approve/reject the row this run just created directly from the chat
@@ -87,6 +92,9 @@ def test_preview_streams_one_event_per_node_and_a_final_result(
     # shows them so a mostly-already-mapped infobox reads as correct
     # ("22 fields already published") rather than broken ("only 2 mapped").
     assert isinstance(result_event["warnings"], list)
+    # Unmapped fields ride along too, so the frontend can offer an in-chat
+    # "search and assign this one yourself" step for each.
+    assert isinstance(result_event["unmappedFields"], list)
     for step_event in events[:-1]:
         assert step_event["status"] == "done"
         assert "detail" in step_event
@@ -238,7 +246,12 @@ def test_preview_accepts_a_wikipedia_url_and_fetches_it_before_the_pipeline_runs
     assert events[0]["status"] == "done"
     assert "ድልድይ ምሳሌ" in str(events[0]["detail"])
     assert events[-1]["mappings"] == [
-        {"templateProperty": "ርዝመት", "ontologyProperty": "length", "confidence": 1.0}
+        {
+            "templateProperty": "ርዝመት",
+            "ontologyProperty": "length",
+            "confidence": 1.0,
+            "source": "retrieval",
+        }
     ]
 
 
@@ -270,3 +283,4 @@ def test_preview_reports_a_failed_wikipedia_fetch_as_an_error_step_not_a_500(
     assert "404" in str(events[0]["detail"])
     assert events[1]["mappings"] == []
     assert events[1]["reviewItemId"] is None
+    assert events[1]["unmappedFields"] == []

@@ -15,6 +15,7 @@
 		ensureActiveSession,
 		touchSession
 	} from '$lib/chat.svelte';
+	import type { MappingCandidate } from '$lib/types';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
@@ -49,6 +50,77 @@
 	let scrollAnchor: HTMLDivElement | undefined = $state();
 
 	const turns = $derived(currentSession()?.turns ?? []);
+
+	// In-chat "search the ontology and assign this unmapped field yourself"
+	// state, keyed `${turn.id}::${fieldName}`. Deliberately not part of the
+	// persisted chat session -- it's transient per-visit scratch state, so
+	// the effect below rehydrates an empty entry for every unmapped field
+	// after a reload.
+	interface AssignState {
+		query: string;
+		running: boolean;
+		matches: MappingCandidate[] | null;
+		error?: string;
+	}
+	let assignByField = $state<Record<string, AssignState>>({});
+
+	const assignKey = (turnId: string, field: string) => `${turnId}::${field}`;
+
+	$effect(() => {
+		for (const turn of turns) {
+			if (turn.kind !== 'pipeline' || !turn.unmappedFields) continue;
+			for (const field of turn.unmappedFields) {
+				const key = assignKey(turn.id, field.name);
+				if (!assignByField[key]) {
+					assignByField[key] = { query: field.name, running: false, matches: null };
+				}
+			}
+		}
+	});
+
+	async function searchForField(turn: PipelineTurn, fieldName: string) {
+		const entry = assignByField[assignKey(turn.id, fieldName)];
+		if (!entry || entry.running) return;
+		const query = entry.query.trim();
+		if (!query) return;
+		entry.running = true;
+		entry.error = undefined;
+		entry.matches = null;
+		try {
+			const result = await findSemanticMatch(query, turn.targetClass);
+			entry.matches = result.matches;
+		} catch (err) {
+			entry.error =
+				err instanceof BackendUnavailableError
+					? 'cross-lingual is not reachable.'
+					: `Lookup failed: ${err instanceof Error ? err.message : String(err)}`;
+		} finally {
+			entry.running = false;
+		}
+	}
+
+	// Auto-predicted rows plus any the reviewer assigned by hand -- the set
+	// that gets approved and, later, published.
+	const rowsFor = (turn: PipelineTurn) => [
+		...(turn.mappings ?? []),
+		...(turn.manualMappings ?? [])
+	];
+
+	function attachManualMapping(
+		turn: PipelineTurn,
+		fieldName: string,
+		property: string,
+		score: number
+	) {
+		turn.manualMappings = [
+			...(turn.manualMappings ?? []),
+			{ templateProperty: fieldName, ontologyProperty: property, confidence: score, source: 'manual' }
+		];
+		turn.unmappedFields = (turn.unmappedFields ?? []).filter((f) => f.name !== fieldName);
+		delete assignByField[assignKey(turn.id, fieldName)];
+		const session = currentSession();
+		if (session) touchSession(session.id);
+	}
 
 	function looksLikeInfobox(text: string): boolean {
 		return /\{\{\s*infobox/i.test(text) || text.trim().startsWith('{{');
@@ -111,6 +183,7 @@
 						turn.xmlRules = event.xmlRules;
 						turn.reviewItemId = event.reviewItemId;
 						turn.warnings = event.warnings ?? [];
+						turn.unmappedFields = event.unmappedFields ?? [];
 					} else {
 						turn.steps = [...turn.steps, event];
 					}
@@ -185,7 +258,17 @@
 		turn.deciding = true;
 		turn.decisionError = undefined;
 
-		const request = decideReview(id, decision);
+		// Fields the reviewer assigned by hand in the chat ride along on the
+		// approve as `corrected_mappings` -- the decision endpoint already
+		// replaces the item's mappings with these before logging the
+		// decision as training data, so no separate write is needed.
+		const manual = turn.manualMappings ?? [];
+		const request =
+			decision === 'approved' && manual.length > 0
+				? decideReview(id, decision, {
+						correctedMappings: [...(turn.mappings ?? []), ...manual]
+					})
+				: decideReview(id, decision);
 		toast.promise(request, {
 			loading: decision === 'approved' ? 'Approving…' : 'Rejecting…',
 			success: (updated) => {
@@ -332,6 +415,7 @@
 							{/if}
 							<StepTracker steps={turn.steps} />
 							{#if turn.mappings && turn.mappings.length > 0}
+								{@const rows = rowsFor(turn)}
 								<div class="overflow-hidden rounded-lg border">
 									<Table>
 										<TableHeader>
@@ -342,10 +426,26 @@
 											</TableRow>
 										</TableHeader>
 										<TableBody>
-											{#each turn.mappings as mapping (mapping.templateProperty)}
+											{#each rows as mapping (mapping.templateProperty)}
 												<TableRow>
 													<TableCell class="font-mono">{mapping.templateProperty}</TableCell>
-													<TableCell class="font-mono">{mapping.ontologyProperty}</TableCell>
+													<TableCell class="font-mono">
+														{mapping.ontologyProperty}
+														{#if mapping.source === 'llm'}
+															<span
+																class="ml-1.5 rounded bg-warning/15 px-1 py-0.5 text-[10px] font-medium text-warning-foreground"
+																title="Proposed by the language model because retrieval found nothing -- verify before approving."
+															>
+																AI-proposed
+															</span>
+														{:else if mapping.source === 'manual'}
+															<span
+																class="ml-1.5 rounded bg-accent px-1 py-0.5 text-[10px] font-medium text-accent-foreground"
+															>
+																added by you
+															</span>
+														{/if}
+													</TableCell>
 													<TableCell><ConfidencePill confidence={mapping.confidence} /></TableCell>
 												</TableRow>
 											{/each}
@@ -459,6 +559,75 @@
 									{/each}
 								</ul>
 							{/if}
+							{#if turn.mappings && turn.unmappedFields && turn.unmappedFields.length > 0}
+								<div class="rounded-lg border border-dashed p-3">
+									<p class="mb-2.5 text-xs text-muted-foreground">
+										{turn.unmappedFields.length} field{turn.unmappedFields.length === 1 ? '' : 's'} couldn't
+										be mapped automatically. Search the ontology and assign
+										{turn.unmappedFields.length === 1 ? 'it' : 'them'} here, or leave
+										{turn.unmappedFields.length === 1 ? 'it' : 'them'} for the Review Queue.
+									</p>
+									<div class="flex flex-col gap-2.5">
+										{#each turn.unmappedFields as field (field.name)}
+											{@const entry = assignByField[assignKey(turn.id, field.name)]}
+											<div class="rounded-md bg-muted/40 p-2.5">
+												<div class="flex flex-wrap items-baseline gap-x-2">
+													<span class="font-mono text-xs">{field.name}</span>
+													{#if field.value}
+														<span class="truncate text-xs text-muted-foreground">= {field.value}</span>
+													{/if}
+												</div>
+												{#if entry}
+													<div class="mt-2 flex gap-2">
+														<Input
+															class="h-8 text-xs"
+															placeholder="Search the ontology…"
+															bind:value={entry.query}
+															onkeydown={(e) => {
+																if (e.key === 'Enter') {
+																	e.preventDefault();
+																	searchForField(turn, field.name);
+																}
+															}}
+														/>
+														<Button
+															size="sm"
+															variant="outline"
+															disabled={entry.running}
+															onclick={() => searchForField(turn, field.name)}
+														>
+															{entry.running ? 'Searching…' : 'Search'}
+														</Button>
+													</div>
+													{#if entry.error}
+														<p class="mt-1.5 text-xs text-destructive">{entry.error}</p>
+													{:else if entry.matches && entry.matches.length === 0}
+														<p class="mt-1.5 text-xs text-muted-foreground">
+															No confident ontology match for that term.
+														</p>
+													{:else if entry.matches}
+														<ul class="mt-2 flex flex-wrap gap-1.5">
+															{#each entry.matches as match (match.property)}
+																<li>
+																	<button
+																		type="button"
+																		class="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs hover:border-primary/50 hover:bg-accent"
+																		onclick={() =>
+																			attachManualMapping(turn, field.name, match.property, match.score)}
+																	>
+																		<span class="font-mono">{match.property}</span>
+																		<ConfidencePill confidence={match.score} />
+																	</button>
+																</li>
+															{/each}
+														</ul>
+													{/if}
+												{/if}
+											</div>
+										{/each}
+									</div>
+								</div>
+							{/if}
 						{:else if turn.kind === 'answer'}
 							{#if turn.running}
 								<ThinkingIndicator label="Searching the ontology" />
@@ -552,15 +721,16 @@
 				<AlertDialog.Header>
 					<AlertDialog.Title>Publish this mapping live?</AlertDialog.Title>
 					<AlertDialog.Description>
-						This writes <span class="font-mono text-foreground">{turn.mappings?.length ?? 0}</span>
-						mapping{turn.mappings?.length === 1 ? '' : 's'} to
+						This writes
+						<span class="font-mono text-foreground">{rowsFor(turn).length}</span>
+						mapping{rowsFor(turn).length === 1 ? '' : 's'} to
 						<span class="font-mono text-foreground">mappings.dbpedia.org</span> immediately, using a MediaWiki
 						Bot Password — a real edit, not a preview.
 					</AlertDialog.Description>
 				</AlertDialog.Header>
-				{#if turn.mappings}
+				{#if rowsFor(turn).length > 0}
 					<ul class="space-y-1 rounded-lg border bg-muted/40 p-2">
-						{#each turn.mappings as mapping (mapping.templateProperty)}
+						{#each rowsFor(turn) as mapping (mapping.templateProperty)}
 							<li class="font-mono text-xs">
 								{mapping.templateProperty} to
 								<span class="text-foreground">{mapping.ontologyProperty}</span>

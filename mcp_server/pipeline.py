@@ -246,6 +246,7 @@ class PipelineState(TypedDict, total=False):
     xml_rules: str
     review_item_id: str | None
     warnings: list[str]
+    unmapped_fields: list[dict[str, str]]
 
 
 def _extract_node(state: PipelineState) -> dict[str, Any]:
@@ -336,6 +337,7 @@ async def _predict_node(state: PipelineState) -> dict[str, Any]:
     domain_class = state.get("domain_class")
     warnings = list(state.get("warnings", []))
     predictions: dict[str, PredictionResult] = {}
+    unmapped_fields: list[dict[str, str]] = []
 
     for field in state.get("fields", []):
         outcome = await asyncio.to_thread(predict_property, field.name, target_class=domain_class)
@@ -343,8 +345,16 @@ async def _predict_node(state: PipelineState) -> dict[str, Any]:
             predictions[field.name] = outcome
         else:
             warnings.append(f"No retrieval candidates found for {field.name!r}.")
+            # Carried through to the SSE result event so the frontend can
+            # offer an in-chat "search and assign this one yourself" step
+            # rather than the field just vanishing into a warning line.
+            unmapped_fields.append({"name": field.name, "value": field.value[:80]})
 
-    return {"predictions": predictions, "warnings": warnings}
+    return {
+        "predictions": predictions,
+        "warnings": warnings,
+        "unmapped_fields": unmapped_fields,
+    }
 
 
 def _format_node(state: PipelineState) -> dict[str, Any]:
@@ -352,16 +362,31 @@ def _format_node(state: PipelineState) -> dict[str, Any]:
     predictions = state.get("predictions", {})
     warnings = list(state.get("warnings", []))
 
-    mappings: list[dict[str, Any]] = [
-        {
-            "templateProperty": name,
-            "ontologyProperty": prediction.property,
-            "confidence": (
+    mappings: list[dict[str, Any]] = []
+    for name, prediction in predictions.items():
+        if prediction.llm_proposed:
+            # No retrieval score to report -- a fixed low-but-not-zero
+            # confidence so the row reads as "weak guess, check this" rather
+            # than "0%, definitely wrong".
+            confidence = 0.3
+            source = "llm"
+            warnings.append(
+                f"Proposed {prediction.property!r} for {name!r} with the language model "
+                f"(no retrieval match) -- verify before approving."
+            )
+        else:
+            confidence = (
                 prediction.top_retrieval_result.score if prediction.top_retrieval_result else 0.0
-            ),
-        }
-        for name, prediction in predictions.items()
-    ]
+            )
+            source = "retrieval"
+        mappings.append(
+            {
+                "templateProperty": name,
+                "ontologyProperty": prediction.property,
+                "confidence": confidence,
+                "source": source,
+            }
+        )
 
     if not mappings:
         warnings.append("No mappings were predicted; nothing to format.")
@@ -472,6 +497,7 @@ class PipelineResult:
     mapping_wikitext: str
     xml_rules: str
     warnings: list[str]
+    unmapped_fields: list[dict[str, str]]
     review_item_id: str | None
 
 
@@ -522,6 +548,7 @@ async def run_mapping_pipeline(
         mapping_wikitext=final_state.get("mapping_wikitext", ""),
         xml_rules=final_state.get("xml_rules", ""),
         warnings=final_state.get("warnings", []),
+        unmapped_fields=final_state.get("unmapped_fields", []),
         review_item_id=final_state.get("review_item_id"),
     )
 
@@ -626,6 +653,11 @@ async def stream_mapping_pipeline(
         # to approve/reject the very row this run just created without a
         # separate `GET /v1/reviews` round trip to find its id.
         "reviewItemId": state.get("review_item_id"),
+        # Fields retrieval (and the propose-from-scratch LLM fallback)
+        # couldn't map -- `{name, value}` each, so the frontend can offer an
+        # in-chat "search and assign this one" step instead of the field
+        # only showing up as a warning line.
+        "unmappedFields": state.get("unmapped_fields", []),
         # Every node's own notes -- fields skipped as already-published,
         # fields with no confident retrieval match, an auto-derived domain
         # class. Confirmed live that without surfacing these, a country

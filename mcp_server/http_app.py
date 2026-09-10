@@ -352,6 +352,8 @@ async def preview_mapping(request: Request) -> Response:
                             "mappingWikitext": "",
                             "xmlRules": "",
                             "reviewItemId": None,
+                            "warnings": [],
+                            "unmappedFields": [],
                         }
                     )
                     return

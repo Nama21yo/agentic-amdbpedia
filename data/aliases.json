@@ -106,6 +106,27 @@
       "english_aliases": ["language", "film language"],
       "ontology_property": "language",
       "notes": "Distinct from the already-mapped 'ብሔራዊ_ቋንቋ' (Country's officialLanguage); confirmed live to fail retrieval unaided."
+    },
+    {
+      "class": "Country",
+      "amharic": "መዝሙር",
+      "english_aliases": ["anthem", "national anthem"],
+      "ontology_property": "anthem",
+      "notes": "Short form the live am.wikipedia country infobox uses; published mapping keys it as 'ብሔራዊ_መዝሙር', so retrieval on the bare word is weak."
+    },
+    {
+      "class": "Country",
+      "amharic": "ከፍተኛ_ደረጃ_ከባቢ",
+      "english_aliases": ["top level domain", "ccTLD", "country code TLD"],
+      "ontology_property": "topLevelDomain",
+      "notes": "Variant the live am.wikipedia country infobox uses for the ccTLD; published mapping keys it as 'ከፍተኛ_ደረጃ_ዶሜን'; confirmed live to return no retrieval candidates unaided."
+    },
+    {
+      "class": "Country",
+      "amharic": "ታሪካዊ_ቀናት",
+      "english_aliases": ["founding date", "establishment date", "historical dates"],
+      "ontology_property": "foundingDate",
+      "notes": "The country infobox's establishment dates; maps to foundingDate by DBpedia convention; confirmed live to return no retrieval candidates unaided."
     }
   ]
 }

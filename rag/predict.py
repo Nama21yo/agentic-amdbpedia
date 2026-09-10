@@ -20,11 +20,12 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from rapidfuzz import fuzz
 
 from logging_config import log_event
+from rag.ontology import DbpediaOntologyCatalog
 from rag.retrieval import RetrievalCircuitBreaker, RetrievalResult, SearchResult, search
 
 LOGGER = logging.getLogger("dbpedia_mapping_assistant.predict")
@@ -191,6 +192,112 @@ def _call_dspy(
     return prediction.property_class
 
 
+_ONTOLOGY_CATALOG: DbpediaOntologyCatalog | None = None
+
+
+def _ontology_catalog() -> DbpediaOntologyCatalog | None:
+    """The real ~2,900-property ontology catalog, built once and reused.
+
+    Only ever needed by the propose-from-scratch fallback, to check that a
+    property the LLM names is actually a real DBpedia ontology property --
+    so a missing/broken ontology cache degrades that fallback to "no
+    proposal" rather than raising.
+    """
+
+    global _ONTOLOGY_CATALOG
+    if _ONTOLOGY_CATALOG is None:
+        try:
+            _ONTOLOGY_CATALOG = DbpediaOntologyCatalog.from_default_cache()
+        except Exception as exc:  # noqa: BLE001 - any failure here just disables the fallback
+            log_event(LOGGER, "predict.ontology_catalog_unavailable", error=exc.__class__.__name__)
+            return None
+    return _ONTOLOGY_CATALOG
+
+
+class OntologyLookup(Protocol):
+    """The one method the propose fallback needs from an ontology catalog:
+    look a name up and get back something with a `.local_name`, or `None`.
+    `DbpediaOntologyCatalog` satisfies this structurally; tests pass a fake."""
+
+    def find(self, name: str) -> Any: ...
+
+
+class ProposeProgram(Protocol):
+    def __call__(self, *, field_mention: str, entity_type: str) -> DspyPrediction: ...
+
+
+def _build_propose_program() -> ProposeProgram:
+    """DSPy program for the propose-from-scratch fallback: no retriever
+    candidates to choose from, so the LLM names a property outright and the
+    caller validates it against the ontology afterwards."""
+
+    import dspy
+
+    class ProposePropertyFromField(dspy.Signature):  # type: ignore[misc]
+        """Name the single most likely DBpedia ontology property for a
+        (possibly Amharic) infobox field. Answer with just the property's
+        camelCase local name (e.g. "topLevelDomain", "foundingDate"), no
+        namespace prefix. Answer exactly "none" if no standard DBpedia
+        ontology property fits."""
+
+        field_mention: str = dspy.InputField(desc="the infobox field name, often Amharic")
+        entity_type: str = dspy.InputField(desc="the DBpedia class of the described entity")
+        property_class: str = dspy.OutputField(desc="a camelCase DBpedia property name, or none")
+
+    return cast("ProposeProgram", dspy.Predict(ProposePropertyFromField))
+
+
+def _call_propose_dspy(
+    program: ProposeProgram, field_mention: str, entity_type: str, model_alias: str
+) -> str:
+    import dspy
+
+    lm = dspy.LM(
+        resolve_model(model_alias),
+        temperature=0.0,
+        max_tokens=64,
+        num_retries=0,
+        timeout=LLM_CALL_TIMEOUT_SECONDS,
+    )
+    with dspy.context(lm=lm):
+        prediction = program(field_mention=field_mention, entity_type=entity_type or "Thing")
+    return prediction.property_class
+
+
+def propose_property(
+    amharic_property: str,
+    *,
+    target_class: str | None = None,
+    model_alias: str = DEFAULT_MODEL_ALIAS,
+    program: ProposeProgram | None = None,
+    catalog: OntologyLookup | None = None,
+) -> str | None:
+    """Ask the LLM to name a DBpedia property outright, then keep the answer
+    only if it's a real ontology property. Returns the property's canonical
+    local name, or `None` (LLM said "none", the catalog is unavailable, or
+    the answer isn't a real property)."""
+
+    resolved_catalog = catalog if catalog is not None else _ontology_catalog()
+    if resolved_catalog is None:
+        return None
+
+    resolved_program = program if program is not None else _build_propose_program()
+    answer = _call_propose_dspy(
+        resolved_program, amharic_property, target_class or "Thing", model_alias
+    )
+
+    answer = answer.strip().strip("\"'").lstrip(":").split(":")[-1].strip()
+    if not answer or answer.casefold() == "none":
+        return None
+
+    match = resolved_catalog.find(answer)
+    if match is None:
+        log_event(LOGGER, "predict.propose_rejected", answer=answer)
+        return None
+    log_event(LOGGER, "predict.proposed", property=match.local_name)
+    return match.local_name
+
+
 @dataclass(frozen=True)
 class PredictionResult:
     """The final chosen property, plus enough context to explain the choice."""
@@ -200,6 +307,12 @@ class PredictionResult:
     candidates: list[str]
     top_retrieval_result: SearchResult | None
     reason: str = ""
+    # True only for the propose-from-scratch path below: retrieval found
+    # *no* candidates at all and the LLM named a property that was then
+    # validated against the real ontology catalog. Distinct from
+    # `used_llm` (which also covers the ordinary rerank-among-candidates
+    # case) so a caller can flag these rows as "needs a closer look".
+    llm_proposed: bool = False
 
 
 @dataclass(frozen=True)
@@ -222,6 +335,9 @@ def predict_property(
     program: DspyProgram | None = None,
     circuit_breaker: RetrievalCircuitBreaker | None = DEFAULT_PREDICT_CIRCUIT_BREAKER,
     search_func: SearchFunc = search,
+    enable_propose: bool = True,
+    propose_program: ProposeProgram | None = None,
+    catalog: OntologyLookup | None = None,
 ) -> PredictOutcome:
     """Retrieve top-k candidates, then let an LLM rerank among them.
 
@@ -229,12 +345,45 @@ def predict_property(
     `search_func` overrides `rag.retrieval.search` itself — both used by
     tests to run this fully offline, without a live Ollama instance or the
     real embedding-model-backed retrieval index.
+
+    When retrieval finds *no* candidates at all, and `enable_propose` is on
+    and the circuit breaker allows it, one propose-from-scratch LLM call
+    (`propose_property`) gets a validated guess rather than giving up
+    outright — returned as a `PredictionResult` with `llm_proposed=True`
+    and no `top_retrieval_result`.
     """
 
     results = search_func(amharic_property, target_class=target_class, limit=top_k)
     scored = [result for result in results if isinstance(result, SearchResult)]
     if not scored:
-        return NoCandidatesFound(query=amharic_property)
+        allow_llm = circuit_breaker is None or circuit_breaker.allow_request()
+        if not (enable_propose and allow_llm):
+            return NoCandidatesFound(query=amharic_property)
+        try:
+            proposed = propose_property(
+                amharic_property,
+                target_class=target_class,
+                model_alias=model_alias,
+                program=propose_program,
+                catalog=catalog,
+            )
+        except Exception as exc:  # noqa: BLE001 - same degradation as a rerank failure
+            if circuit_breaker is not None:
+                circuit_breaker.record_failure()
+            log_event(LOGGER, "predict.propose_unavailable", error=exc.__class__.__name__)
+            return NoCandidatesFound(query=amharic_property)
+        if circuit_breaker is not None:
+            circuit_breaker.record_success()
+        if proposed is None:
+            return NoCandidatesFound(query=amharic_property)
+        return PredictionResult(
+            property=proposed,
+            used_llm=True,
+            candidates=[proposed],
+            top_retrieval_result=None,
+            reason="LLM-proposed (no retrieval candidates)",
+            llm_proposed=True,
+        )
 
     candidates = [result.property for result in scored]
     top_result = scored[0]

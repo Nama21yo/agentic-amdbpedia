@@ -294,6 +294,48 @@ async def test_pipeline_handles_fields_with_no_retrieval_candidates(
 
     assert result.mappings == []
     assert any("No retrieval candidates" in warning for warning in result.warnings)
+    # The unmapped field is carried through so the frontend can offer an
+    # in-chat "search and assign this one yourself" step, not just a warning.
+    assert result.unmapped_fields == [{"name": "ያልታወቀ_መስክ", "value": "something"}]
+
+
+@pytest.mark.asyncio
+async def test_pipeline_marks_an_llm_proposed_mapping_and_warns_about_it(
+    engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _propose(amharic_property: str, **kwargs: Any) -> Any:
+        if amharic_property != "ከፍተኛ_ደረጃ_ከባቢ":
+            return NoMatchFound(query=amharic_property)
+        return PredictionResult(
+            property="topLevelDomain",
+            used_llm=True,
+            candidates=["topLevelDomain"],
+            top_retrieval_result=None,
+            reason="LLM-proposed (no retrieval candidates)",
+            llm_proposed=True,
+        )
+
+    monkeypatch.setattr("mcp_server.pipeline.predict_property", _propose)
+    factory = session_factory(engine)
+
+    async with factory() as session:
+        result = await run_mapping_pipeline(
+            "{{Infobox country | ከፍተኛ_ደረጃ_ከባቢ = .er}}",
+            domain_class="Country",
+            session=session,
+            mapping_index=_empty_mapping_index(),
+        )
+
+    assert result.mappings == [
+        {
+            "templateProperty": "ከፍተኛ_ደረጃ_ከባቢ",
+            "ontologyProperty": "topLevelDomain",
+            "confidence": 0.3,
+            "source": "llm",
+        }
+    ]
+    assert any("language model" in warning for warning in result.warnings)
+    assert result.unmapped_fields == []
 
 
 @pytest.mark.asyncio

@@ -16,6 +16,20 @@ export interface PredictedMapping {
 	templateProperty: string;
 	ontologyProperty: string;
 	confidence: number;
+	// How this row was arrived at: `retrieval` (the ontology search, the
+	// default), `llm` (proposed from scratch by the language model because
+	// retrieval found nothing — treat as a weak guess), or `manual` (a
+	// reviewer assigned it by hand from the chat). Absent on older
+	// backends — treat undefined as `retrieval`.
+	source?: 'retrieval' | 'llm' | 'manual';
+}
+
+/** A field neither retrieval nor the LLM fallback could map, carried on
+ * the pipeline's final result event so the chat can offer a "search and
+ * assign this one yourself" step. `value` is truncated server-side. */
+export interface UnmappedField {
+	name: string;
+	value: string;
 }
 
 /**

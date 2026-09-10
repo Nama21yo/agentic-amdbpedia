@@ -12,7 +12,8 @@ import type {
 	MappingSyntax,
 	PredictedMapping,
 	ReviewItem,
-	ReviewStatus
+	ReviewStatus,
+	UnmappedField
 } from './types';
 
 export class BackendUnavailableError extends Error {}
@@ -56,6 +57,10 @@ type PreviewEvent =
 			// with no confident match, an auto-derived domain class. Absent
 			// on older backends -- treat undefined as [].
 			warnings?: string[];
+			// Fields neither retrieval nor the LLM fallback could map, for
+			// the chat's in-place "assign this one yourself" step. Absent on
+			// older backends -- treat undefined as [].
+			unmappedFields?: UnmappedField[];
 	  } & MappingSyntax);
 
 /**
