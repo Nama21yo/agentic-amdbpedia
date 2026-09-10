@@ -12,7 +12,12 @@ const REVIEW_ITEM_ID = 'review-123';
 // a mock of unrelated shape.
 async function* fakeStream(): AsyncGenerator<
 	| AgentStep
-	| ({ node: 'result'; mappings: PredictedMapping[]; reviewItemId: string | null } & MappingSyntax)
+	| ({
+			node: 'result';
+			mappings: PredictedMapping[];
+			reviewItemId: string | null;
+			warnings?: string[];
+	  } & MappingSyntax)
 > {
 	yield { node: 'extract_infobox_fields', status: 'done', detail: 'Extracting' };
 	yield { node: 'predict_properties', status: 'done', detail: 'Predicting' };
@@ -22,7 +27,8 @@ async function* fakeStream(): AsyncGenerator<
 		mappingWikitext:
 			'{{TemplateMapping\n | mapToClass = Bridge\n | mappings =\n  {{PropertyMapping | templateProperty = ርዝመት | ontologyProperty = length }}\n}}',
 		xmlRules: '<TemplateMapping mapToClass="dbo:Bridge">...</TemplateMapping>',
-		reviewItemId: REVIEW_ITEM_ID
+		reviewItemId: REVIEW_ITEM_ID,
+		warnings: ['Skipped 3 field(s) already present in the published Amharic mappings.']
 	};
 }
 
@@ -75,6 +81,15 @@ describe('mutating a turn after push (reproducing "chat doesn\'t show the reply"
 			expect(screen.getByText(/mapToClass = Bridge/)).toBeInTheDocument();
 			expect(screen.getByText('View mapping XML')).toBeInTheDocument();
 			expect(screen.getByText(/<TemplateMapping/)).toBeInTheDocument();
+		});
+
+		// Pipeline notes must be visible too -- without them a result with
+		// few mappings because most fields are already published reads as
+		// broken rather than correct.
+		await waitFor(() => {
+			expect(
+				screen.getByText(/Skipped 3 field\(s\) already present in the published Amharic mappings/)
+			).toBeInTheDocument();
 		});
 	});
 

@@ -25,6 +25,11 @@ export interface PipelineTurn {
 	// the latter: a real row this run actually created.
 	reviewItemId?: string | null;
 	reviewStatus?: ReviewStatus;
+	// Pipeline notes shown under the result: fields skipped as
+	// already-published, fields with no confident match, an auto-derived
+	// domain class. Without these a mostly-already-mapped infobox looks
+	// broken ("only 2 mapped?") rather than correct.
+	warnings?: string[];
 	deciding?: boolean;
 	decisionError?: string;
 	// Publishing is a separate, later step from approving -- a turn can sit

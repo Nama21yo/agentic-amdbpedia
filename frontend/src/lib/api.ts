@@ -48,7 +48,15 @@ async function safeFetch(input: string, init?: RequestInit): Promise<Response> {
 
 type PreviewEvent =
 	| AgentStep
-	| ({ node: 'result'; mappings: PredictedMapping[]; reviewItemId: string | null } & MappingSyntax);
+	| ({
+			node: 'result';
+			mappings: PredictedMapping[];
+			reviewItemId: string | null;
+			// Pipeline notes: fields skipped as already-published, fields
+			// with no confident match, an auto-derived domain class. Absent
+			// on older backends -- treat undefined as [].
+			warnings?: string[];
+	  } & MappingSyntax);
 
 /**
  * True for a real `wikipedia.org` article link (any language edition) --

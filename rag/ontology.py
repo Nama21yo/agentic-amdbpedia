@@ -226,6 +226,15 @@ class AmharicMappingIndex:
     template-and-property together, no cross-template fallback, so a
     field only counts as "already published" when it actually is, for
     *this* template.
+
+    Also records each page's `mapToClass` (Person, Country, Place, Film,
+    ...). `domain_class_for_template()` lets the pipeline auto-derive the
+    ontology class from the infobox's own template name when the caller
+    didn't specify one -- without it, a Wikipedia-link preview (which has
+    no target-class input at all) or a bare pasted infobox falls back to
+    `Thing`, losing the retrieval class hint that confirmed live is the
+    difference between an Amharic country infobox mapping almost all its
+    fields and mapping just one.
     """
 
     PROPERTY_MAPPING_RE = re.compile(
@@ -238,6 +247,7 @@ class AmharicMappingIndex:
     ONTOLOGY_PROPERTY_RE = re.compile(
         r"\|\s*ontologyProperty\s*=\s*(?P<value>[^|}\n]+)", re.IGNORECASE
     )
+    MAP_TO_CLASS_RE = re.compile(r"\|\s*mapToClass\s*=\s*(?P<value>[^|}\n]+)", re.IGNORECASE)
     # `scripts.refresh_wiki_cache.refresh_mappings` re-serializes a merged
     # export through ElementTree, which rewrites the default `xmlns=` into
     # an explicit `ns0:` prefix on every element (confirmed live) -- the
@@ -259,12 +269,14 @@ class AmharicMappingIndex:
         mappings: dict[str, ExistingTemplateMapping],
         template_names: frozenset[str] = frozenset(),
         scoped_mappings: dict[tuple[str, str], ExistingTemplateMapping] | None = None,
+        template_classes: dict[str, str] | None = None,
     ) -> None:
         self._mappings = mappings
         self._template_names = template_names
         self._scoped_mappings: dict[tuple[str, str], ExistingTemplateMapping] = (
             scoped_mappings or {}
         )
+        self._template_classes: dict[str, str] = template_classes or {}
 
     def __len__(self) -> int:
         return len(self._mappings)
@@ -284,6 +296,7 @@ class AmharicMappingIndex:
         mappings: dict[str, ExistingTemplateMapping] = {}
         scoped_mappings: dict[tuple[str, str], ExistingTemplateMapping] = {}
         template_names: set[str] = set()
+        template_classes: dict[str, str] = {}
 
         for page_match in cls.PAGE_RE.finditer(text):
             page_text = page_match.group()
@@ -292,6 +305,14 @@ class AmharicMappingIndex:
                 continue
             normalized_template_name = cls._normalize_template_name(title_match.group("name"))
             template_names.add(normalized_template_name)
+
+            class_match = cls.MAP_TO_CLASS_RE.search(page_text)
+            if class_match is not None:
+                mapped_class = cls._clean_mapping_value(class_match.group("value"))
+                # owl:Thing carries no useful class hint -- treat "no
+                # meaningful class" and "no mapToClass at all" the same.
+                if mapped_class and mapped_class.casefold() not in {"owl:thing", "thing"}:
+                    template_classes[normalized_template_name] = mapped_class.split(":", 1)[-1]
 
             for match in cls.PROPERTY_MAPPING_RE.finditer(page_text):
                 body = match.group("body")
@@ -319,10 +340,20 @@ class AmharicMappingIndex:
             mappings=len(mappings),
             templates=len(template_names),
         )
-        return cls(mappings, frozenset(template_names), scoped_mappings)
+        return cls(mappings, frozenset(template_names), scoped_mappings, template_classes)
 
     def lookup(self, template_property: str) -> ExistingTemplateMapping | None:
         return self._mappings.get(self._normalize_template_property(template_property))
+
+    def domain_class_for_template(self, template_name: str) -> str | None:
+        """The DBpedia ontology class this corpus already maps
+        `template_name` to (from its `mapToClass`), or None if there's no
+        `Mapping am:<template_name>` page (or it maps only to owl:Thing).
+        Lets `mcp_server.pipeline._extract_node` fill in a class the caller
+        didn't give -- especially the Wikipedia-link flow, which has no
+        target-class input at all."""
+
+        return self._template_classes.get(self._normalize_template_name(template_name))
 
     def is_already_mapped_on_template(
         self, template_name: str, template_property: str

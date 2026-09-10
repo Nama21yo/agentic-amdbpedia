@@ -262,10 +262,26 @@ def _extract_node(state: PipelineState) -> dict[str, Any]:
 
     template = extract_first_infobox(state["wikitext"], mapping_index=mapping_index)
     warnings = list(state.get("warnings", []))
+    updates: dict[str, Any] = {}
 
     if template is None:
         warnings.append("No infobox-like template found in the given wikitext.")
         return {"template_name": "", "fields": [], "warnings": warnings}
+
+    # Fill in a domain class from the corpus's own `mapToClass` when the
+    # caller didn't give one (the Wikipedia-link preview has no
+    # target-class input at all, and a bare pasted infobox often won't
+    # either). "Thing" is the HTTP layer's own default sentinel for
+    # "unspecified". An explicit caller-provided class always wins.
+    current_class = state.get("domain_class")
+    if current_class in (None, "", "Thing"):
+        detected = mapping_index.domain_class_for_template(template.name)
+        if detected is not None:
+            updates["domain_class"] = detected
+            warnings.append(
+                f"No target class was given -- using {detected!r} from the published "
+                f"mapping for template {template.name!r}."
+            )
 
     kept_fields: list[TemplateField] = []
     skipped = 0
@@ -288,7 +304,12 @@ def _extract_node(state: PipelineState) -> dict[str, Any]:
     if not kept_fields:
         warnings.append("No unmapped fields remained after filtering already-published mappings.")
 
-    return {"template_name": template.name, "fields": kept_fields, "warnings": warnings}
+    return {
+        "template_name": template.name,
+        "fields": kept_fields,
+        "warnings": warnings,
+        **updates,
+    }
 
 
 async def _predict_node(state: PipelineState) -> dict[str, Any]:
@@ -494,7 +515,9 @@ async def run_mapping_pipeline(
     return PipelineResult(
         run_id=resolved_run_id,
         template_name=final_state.get("template_name", ""),
-        domain_class=domain_class,
+        # `_extract_node` may have auto-derived this from the template's
+        # own `mapToClass` when the caller passed the "Thing" default.
+        domain_class=final_state.get("domain_class") or domain_class,
         mappings=final_state.get("mappings", []),
         mapping_wikitext=final_state.get("mapping_wikitext", ""),
         xml_rules=final_state.get("xml_rules", ""),
@@ -603,6 +626,13 @@ async def stream_mapping_pipeline(
         # to approve/reject the very row this run just created without a
         # separate `GET /v1/reviews` round trip to find its id.
         "reviewItemId": state.get("review_item_id"),
+        # Every node's own notes -- fields skipped as already-published,
+        # fields with no confident retrieval match, an auto-derived domain
+        # class. Confirmed live that without surfacing these, a country
+        # infobox whose fields are mostly already mapped looks broken
+        # ("only 2 of 28 mapped?") rather than correct ("22 were already
+        # published, 4 had no clean property").
+        "warnings": state.get("warnings", []),
     }
 
 

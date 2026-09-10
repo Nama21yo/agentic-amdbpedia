@@ -98,6 +98,16 @@ def test_mapping_index_scoped_lookup_finds_a_real_per_template_mapping() -> None
     assert mapping.ontology_property == "elevation"
 
 
+def test_mapping_index_domain_class_for_template_reads_maptoclass() -> None:
+    index = AmharicMappingIndex.from_default_cache()
+    assert index.domain_class_for_template("የሀገር መረጃ") == "Country"
+    assert index.domain_class_for_template("መረጃሳጥን ሰው") == "Person"
+    # whitespace/underscore/case normalized the same as everywhere else
+    assert index.domain_class_for_template("የሀገር_መረጃ") == "Country"
+    # a template this corpus has never mapped -> no class to offer
+    assert index.domain_class_for_template("የሳይንቲስት መረጃ") is None
+
+
 def test_mapping_index_scoped_lookup_does_not_leak_across_templates() -> None:
     # Regression: confirmed live that Place's "ከፍታ -> elevation" mapping
     # was making Dam's own, genuinely unmapped "ከፍታ" field look

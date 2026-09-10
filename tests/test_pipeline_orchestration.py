@@ -198,6 +198,62 @@ async def test_pipeline_does_not_skip_a_field_only_mapped_on_a_different_templat
 
 
 @pytest.mark.asyncio
+async def test_pipeline_auto_derives_domain_class_from_the_template_when_none_is_given(
+    engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The Wikipedia-link preview has no target-class input at all, so it
+    always passes the HTTP layer's "Thing" default -- confirmed live that
+    an Amharic country infobox then mapped just one of its ~28 fields for
+    lack of the retrieval class hint. When the corpus already maps this
+    template to a class, the pipeline should use that instead of Thing."""
+
+    monkeypatch.setattr("mcp_server.pipeline.predict_property", _fake_predict_property)
+    factory = session_factory(engine)
+
+    country_index = AmharicMappingIndex(
+        {},
+        template_names=frozenset({AmharicMappingIndex._normalize_template_name("መረጃሳጥን ድልድይ")}),
+        template_classes={AmharicMappingIndex._normalize_template_name("መረጃሳጥን ድልድይ"): "Country"},
+    )
+
+    async with factory() as session:
+        result = await run_mapping_pipeline(
+            BRIDGE_WIKITEXT,
+            domain_class="Thing",  # the HTTP layer's "unspecified" sentinel
+            session=session,
+            mapping_index=country_index,
+        )
+
+    assert result.domain_class == "Country"
+    assert "mapToClass = Country" in result.mapping_wikitext
+    assert any("using 'Country'" in warning for warning in result.warnings)
+
+
+@pytest.mark.asyncio
+async def test_pipeline_keeps_an_explicit_domain_class_over_the_templates_own(
+    engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("mcp_server.pipeline.predict_property", _fake_predict_property)
+    factory = session_factory(engine)
+
+    country_index = AmharicMappingIndex(
+        {},
+        template_classes={AmharicMappingIndex._normalize_template_name("መረጃሳጥን ድልድይ"): "Country"},
+    )
+
+    async with factory() as session:
+        result = await run_mapping_pipeline(
+            BRIDGE_WIKITEXT,
+            domain_class="Bridge",  # explicit -- must win
+            session=session,
+            mapping_index=country_index,
+        )
+
+    assert result.domain_class == "Bridge"
+    assert not any("using '" in warning for warning in result.warnings)
+
+
+@pytest.mark.asyncio
 async def test_pipeline_handles_wikitext_with_no_infobox(
     engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
 ) -> None:

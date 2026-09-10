@@ -110,6 +110,7 @@
 						turn.mappingWikitext = event.mappingWikitext;
 						turn.xmlRules = event.xmlRules;
 						turn.reviewItemId = event.reviewItemId;
+						turn.warnings = event.warnings ?? [];
 					} else {
 						turn.steps = [...turn.steps, event];
 					}
@@ -448,6 +449,15 @@
 								<p class="text-sm text-muted-foreground">
 									No properties were confidently mapped from that infobox.
 								</p>
+							{/if}
+							{#if turn.mappings && turn.warnings && turn.warnings.length > 0}
+								<ul class="space-y-1 text-xs text-muted-foreground">
+									{#each turn.warnings as note (note)}
+										<li class="flex gap-1.5">
+											<span aria-hidden="true">·</span><span>{note}</span>
+										</li>
+									{/each}
+								</ul>
 							{/if}
 						{:else if turn.kind === 'answer'}
 							{#if turn.running}

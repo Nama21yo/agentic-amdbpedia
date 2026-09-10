@@ -83,6 +83,10 @@ def test_preview_streams_one_event_per_node_and_a_final_result(
     # approve/reject the row this run just created directly from the chat
     # turn, without a separate GET /v1/reviews round trip to find its id.
     assert isinstance(result_event["reviewItemId"], str) and result_event["reviewItemId"]
+    # Pipeline notes ride along on the final event too -- the frontend
+    # shows them so a mostly-already-mapped infobox reads as correct
+    # ("22 fields already published") rather than broken ("only 2 mapped").
+    assert isinstance(result_event["warnings"], list)
     for step_event in events[:-1]:
         assert step_event["status"] == "done"
         assert "detail" in step_event
