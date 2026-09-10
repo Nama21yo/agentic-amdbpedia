@@ -876,6 +876,16 @@ Confirm Terminal 4 (`just run-http`) is actually running and
 fails closed into this message by design rather than crashing or showing
 fake data — that's not a bug to work around during recording.
 
+### `just run-http` fails with "address already in use"
+
+`just run-http` (`scripts/run_http.py`) tries port 8001 first and falls back
+to the next free port (8002, 8003, ...) if something's already holding
+it — a leftover server process from an earlier terminal or session is the
+usual cause. Check the printed line: if it started on a port other than
+8001, update `frontend/.env`'s `PUBLIC_CROSS_LINGUAL_URL` to match, or just
+stop whatever's holding 8001 (`lsof -i :8001` / `pkill -f "uvicorn
+mcp_server"`) and restart so it lands back on the default.
+
 ### The Groq calls fail with 401 or a model-not-found error
 
 Two distinct causes, both confirmed live while writing this runbook:

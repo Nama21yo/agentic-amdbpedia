@@ -6,7 +6,9 @@ FastMCP tool interface — this is the general HTTP surface
 `frontend/src/lib/api.ts` and `agentic-dbpedia`'s pipeline actually call.
 Run it with `uvicorn mcp_server.http_app:create_app --factory` (refs the
 `create_app` docstring below for why this is a factory, not a bare
-module-level `app` object).
+module-level `app` object) -- or `just run-http` (`scripts/run_http.py`),
+which does the same thing but also falls back to the next free port if
+the preferred one is already taken by a stale server process.
 
 Every response the frontend reads matches `frontend/src/lib/types.ts`'s
 shapes field-for-field (camelCase) via `ReviewItem.to_api_dict()` — not
